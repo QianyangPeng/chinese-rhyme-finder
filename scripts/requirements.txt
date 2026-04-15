@@ -1,0 +1,19 @@
+# Python 3.11+ expected.
+# Install with: pip install -r requirements.txt
+
+# Core
+pypinyin>=0.54.0        # 字 → 拼音；此处仅用作交叉验证 JS 管道结果
+jieba>=0.42.1           # 分词 + 词性，用于 pos_validity 特征
+pandas>=2.2.0           # 数据清洗 + 统计
+
+# HTTP / scraping (按需用，默认不触发网络)
+requests>=2.32.0
+beautifulsoup4>=4.12.0
+lxml>=5.3.0
+
+# 开发/测试
+pytest>=8.3.0
+pytest-cov>=5.0.0
+
+# 可选：更高级的 NLP（不强依赖）
+# hanlp>=2.1.0
