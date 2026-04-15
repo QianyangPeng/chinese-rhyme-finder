@@ -1,0 +1,13 @@
+# Cross-platform line-ending consistency.
+# Force LF in the repository for all text files; keep binaries as-is.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.bin binary
+*.woff binary
+*.woff2 binary

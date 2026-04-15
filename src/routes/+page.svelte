@@ -54,11 +54,14 @@
   <!-- Status banner -->
   <section class="mb-8 rounded-lg border border-emerald-200 bg-emerald-50 p-5">
     <p class="font-mono text-xs uppercase tracking-wider text-emerald-700">
-      Status · Phase 1 进行中
+      Status · Phase 1 MVP 闭环
     </p>
     <p class="mt-2 text-sm text-zinc-700">
-      拼音 → 韵母 → 韵组管道完成（95 单元测试通过）。3 个押韵 scheme（严式 /
-      十三辙 / 宽松邻韵）+ matcher + 分级宽松枚举就绪。下一里程碑：词库 + Discover 模式 UI。
+      四个模式都跑通了：
+      <a href="{base}/discover" class="font-semibold text-emerald-800 underline">Discover</a> ·
+      <a href="{base}/search" class="font-semibold text-emerald-800 underline">Search</a> ·
+      <a href="{base}/analyze" class="font-semibold text-emerald-800 underline">Analyze</a> · 引擎实测（下方）。126 单元测试通过。
+      下一里程碑：Phase 1.4 Python 数据管道（爬取 + 清洗 + 质量打分 + 把词库扩到 50k+）。
     </p>
   </section>
 
