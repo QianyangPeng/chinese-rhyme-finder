@@ -22,6 +22,7 @@
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "@types/node": "^22.0.0",
     "autoprefixer": "^10.4.20",
+    "opencc-js": "^1.0.5",
     "postcss": "^8.4.49",
     "prettier": "^3.3.0",
     "prettier-plugin-svelte": "^3.2.0",

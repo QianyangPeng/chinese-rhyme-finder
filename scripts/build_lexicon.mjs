@@ -26,6 +26,11 @@ import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { pinyin } from 'pinyin-pro';
+import * as OpenCC from 'opencc-js';
+
+// Traditional → Simplified converter (covers 臺→台, 頭→头, 舉→举, etc.)
+// Applied to 唐诗 since the upstream file uses 繁體.
+const tradToSimp = OpenCC.Converter({ from: 'tw', to: 'cn' });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -36,6 +41,14 @@ const XINHUA_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'xinhua-idiom.jso
 const XIEHOUYU_URL =
   'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/xiehouyu.json';
 const XIEHOUYU_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'xinhua-xiehouyu.json');
+
+// chinese-poetry curated anthologies (MIT licensed, public-domain text).
+const TANGSHI300_URL =
+  'https://raw.githubusercontent.com/chinese-poetry/chinese-poetry/master/%E8%92%99%E5%AD%A6/tangshisanbaishou.json';
+const TANGSHI300_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'tangshi300.json');
+const CI300_URL =
+  'https://raw.githubusercontent.com/chinese-poetry/chinese-poetry/master/%E5%AE%8B%E8%AF%8D/%E5%AE%8B%E8%AF%8D%E4%B8%89%E7%99%BE%E9%A6%96.json';
+const CI300_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'ci300.json');
 
 // ─── CLI parsing ───────────────────────────────────────────────────────
 
@@ -54,6 +67,7 @@ const XIEHOUYU_LOCAL = flags.xiehouyu ?? null;
 const MAX_ENTRIES = flags.max ? parseInt(String(flags.max), 10) : Infinity;
 const SKIP_DOWNLOAD = !!flags['no-download'];
 const SKIP_XIEHOUYU = !!flags['no-xiehouyu'];
+const SKIP_POETRY = !!flags['no-poetry'];
 
 // ─── Fetch helpers ─────────────────────────────────────────────────────
 
@@ -127,6 +141,22 @@ async function loadXiehouyu() {
   const arr = JSON.parse(raw);
   if (!Array.isArray(arr)) return [];
   return arr;
+}
+
+/** Fetch + parse a chinese-poetry dataset file. Returns raw JSON, null on failure. */
+async function loadPoetryFile(url, cachePath) {
+  if (fs.existsSync(cachePath)) {
+    return JSON.parse(await fsp.readFile(cachePath, 'utf-8'));
+  }
+  if (SKIP_DOWNLOAD) return null;
+  try {
+    console.error(`[poetry] downloading ${url}`);
+    await downloadToFile(url, cachePath);
+    return JSON.parse(await fsp.readFile(cachePath, 'utf-8'));
+  } catch (err) {
+    console.error(`[poetry] fetch failed: ${err.message}`);
+    return null;
+  }
 }
 
 // ─── Pinyin → canonical final mapping ──────────────────────────────────
@@ -383,6 +413,105 @@ function processXiehouyuEntry(entry) {
   return out;
 }
 
+// ─── 古诗词片段 ─────────────────────────────────────────────────────────
+//
+// Parse 唐诗三百首 / 宋词三百首 structure and emit short phrases.
+// Each poem is split on inner punctuation (，。；、！？：) into fragments;
+// we keep fragments of 2-7 characters — the sweet spot for rhyme
+// clusters. Longer fragments would just become noise.
+
+const POEM_SPLIT_RE = /[，。；、！？：\s]+/;
+
+function scorePoemFragment(text, anthology, era) {
+  let score = 0.7;
+  const n = text.length;
+  if (n === 4 || n === 5) score += 0.12;
+  else if (n === 3 || n === 6) score += 0.06;
+  else if (n === 7) score += 0.04;
+  else if (n === 2) score += 0.02;
+  else score -= 0.1;
+
+  // 唐诗三百首 / 宋词三百首 are curated anthologies → bonus.
+  if (anthology) score += 0.04;
+
+  // Penalty for obscure archaic characters (loose)
+  if (/[兮哉矣乎夫者]/.test(text)) score -= 0.05;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function processPoemFragments(rawPoems, era, needsSimplification) {
+  // rawPoems: array of { paragraphs: [] }
+  const out = [];
+  if (!Array.isArray(rawPoems)) return out;
+
+  for (const poem of rawPoems) {
+    const paragraphs = poem.paragraphs || [];
+    for (const line of paragraphs) {
+      if (typeof line !== 'string') continue;
+      // Tang corpus is 繁體; convert to 简体 so users see/search
+      // consistent text and don't get duplicated 杨柳 / 楊柳.
+      const normalizedLine = needsSimplification ? tradToSimp(line) : line;
+      const fragments = normalizedLine.split(POEM_SPLIT_RE).filter(Boolean);
+      for (const frag of fragments) {
+        const text = frag.trim();
+        if (text.length < 2 || text.length > 7) continue;
+        if (chineseCharCount(text) < 2) continue;
+
+        const py = pinyin(text, {
+          type: 'array',
+          toneType: 'symbol',
+          multiple: false
+        });
+        const finals = py.map(extractFinal);
+        if (finals.some((f) => !f || !VALID_FINALS.has(f))) continue;
+
+        const quality = scorePoemFragment(text, true, era);
+        if (quality < 0.5) continue;
+
+        out.push({
+          text,
+          finals,
+          length: finals.length,
+          quality: Math.round(quality * 10000) / 10000,
+          tags: ['classical', 'poem', era],
+          source: `chinese-poetry/${era}`
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** Load + extract fragments from 唐诗三百首 + 宋词三百首.
+ *  Returns an array of phrase records, possibly empty on fetch failure. */
+async function loadPoetryFragments() {
+  const out = [];
+
+  const tangshi = await loadPoetryFile(TANGSHI300_URL, TANGSHI300_CACHE);
+  if (tangshi) {
+    // 唐诗三百首 is nested: {title, content: [{type, content: [poem, ...]}, ...]}
+    const allTangPoems = [];
+    if (tangshi.content) {
+      for (const cat of tangshi.content) {
+        if (cat.content) allTangPoems.push(...cat.content);
+      }
+    }
+    console.error(`[tangshi] ${allTangPoems.length} poems loaded`);
+    // Tang file is 繁體 — convert to 简体 for user-facing consistency.
+    out.push(...processPoemFragments(allTangPoems, 'tang', true));
+  }
+
+  const ci = await loadPoetryFile(CI300_URL, CI300_CACHE);
+  if (Array.isArray(ci)) {
+    console.error(`[song-ci] ${ci.length} ci loaded`);
+    // Ci file already uses 简体.
+    out.push(...processPoemFragments(ci, 'song', false));
+  }
+
+  return out;
+}
+
 async function main() {
   const raw = await loadXinhuaIdioms();
   console.error(`[xinhua] ${raw.length} raw idioms`);
@@ -436,6 +565,25 @@ async function main() {
     }
     console.error(
       `[xiehouyu build] added ${xhyKept}, dropped ${xhyDrops.dup} (dup with xinhua)`
+    );
+  }
+
+  // ─── Third source: 唐诗三百首 + 宋词三百首 fragments ───────────────
+  if (!SKIP_POETRY && records.length < MAX_ENTRIES) {
+    const poemRecs = await loadPoetryFragments();
+    let poKept = 0, poDup = 0;
+    for (const rec of poemRecs) {
+      if (seen.has(rec.text)) {
+        poDup++;
+        continue;
+      }
+      seen.add(rec.text);
+      records.push(rec);
+      poKept++;
+      if (records.length >= MAX_ENTRIES) break;
+    }
+    console.error(
+      `[poetry build] added ${poKept}, dropped ${poDup} (dup)`
     );
   }
 
