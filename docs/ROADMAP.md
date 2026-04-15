@@ -11,20 +11,21 @@
 
 ## Phase 1 · MVP 核心引擎 + 第一版 Discover
 
-### P1.1 拼音 + 韵母管道（依赖：无）
+### P1.1 拼音 + 韵母管道（依赖：无）✅
 
-- [ ] `src/core/pinyin/parser.ts` — 字 → 拼音（基于 pinyin-pro，多音字按词典词性选最常用读音）
-- [ ] `src/core/pinyin/decomposer.ts` — 拼音 → (声母, 韵头, 韵腹, 韵尾, 声调)
-- [ ] `src/core/pinyin/normalizer.ts` — 处理 yu→ü、iu→iou、ui→uei、儿化、轻声
-- [ ] 单元测试：≥ 95% 覆盖
+- [x] `src/lib/core/pinyin/parser.ts` — 字 → 拼音（基于 pinyin-pro，多音字按词典词性选最常用读音）
+- [x] `src/lib/core/pinyin/decomposer.ts` — 拼音 → (声母, 韵头, 韵腹, 韵尾, 声调)
+- [x] `src/lib/core/pinyin/normalizer.ts` — 处理 yu→ü、iu→iou、ui→uei、儿化、轻声
+- [x] 单元测试：59 用例全过
 
-### P1.2 韵母分类 + 押韵判定（依赖 P1.1）
+### P1.2 韵母分类 + 押韵判定（依赖 P1.1）✅
 
-- [ ] `src/core/rhyme/schemes/strict.ts` — 严式同韵母
-- [ ] `src/core/rhyme/schemes/shisanzhe.ts` — 十三辙
-- [ ] `src/core/rhyme/schemes/loose.ts` — 宽松邻韵（en/eng、in/ing、an/ang 等）
-- [ ] `src/core/rhyme/matcher.ts` — 给定模式判定两序列是否押韵
-- [ ] `src/core/rhyme/relaxation.ts` — 分级宽松枚举（Level 0 ~ N）
+- [x] `src/lib/core/rhyme/schemes/strict.ts` — 严式同韵母
+- [x] `src/lib/core/rhyme/schemes/shisanzhe.ts` — 十三辙
+- [x] `src/lib/core/rhyme/schemes/loose.ts` — 宽松邻韵（en/eng、in/ing、an/ang 等）
+- [x] `src/lib/core/rhyme/matcher.ts` — 给定模式判定两序列是否押韵（FULL/TAIL/HEAD）
+- [x] `src/lib/core/rhyme/relaxation.ts` — 分级宽松枚举（Level 0 ~ N）
+- [x] 单元测试：36 用例全过
 
 ### P1.3 词库与索引（依赖 P1.2）
 
