@@ -2,6 +2,7 @@
   import { base } from '$app/paths';
   import { page } from '$app/stores';
   import ThemeToggle from './ThemeToggle.svelte';
+  import { favorites } from '$lib/stores/favorites.svelte';
 
   // Static nav entries. `href` is relative to `$app/paths.base` (set by
   // svelte.config.js to '/chinese-rhyme-finder' in production).
@@ -45,6 +46,18 @@
           </a>
         </li>
       {/each}
+      {#if favorites.size > 0}
+        <li>
+          <a
+            href="{base}/discover/?lens=saved"
+            class="flex items-center gap-1 rounded px-2 py-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+            title="我的收藏"
+          >
+            <span>❤️</span>
+            <span class="font-mono text-[11px]">{favorites.size}</span>
+          </a>
+        </li>
+      {/if}
       <li class="ml-1 hidden sm:block">
         <a
           href="https://github.com/QianyangPeng/chinese-rhyme-finder"
