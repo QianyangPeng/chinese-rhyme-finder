@@ -42,10 +42,7 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-10">
-    <p class="font-mono text-xs uppercase tracking-widest text-zinc-500">
-      chinese-rhyme-finder
-    </p>
-    <h1 class="mt-2 text-4xl font-bold tracking-tight text-zinc-900">
+    <h1 class="text-4xl font-bold tracking-tight text-zinc-900">
       中文押韵发现
     </h1>
     <p class="mt-3 text-lg text-zinc-600">不是字典，是灵感引擎。</p>

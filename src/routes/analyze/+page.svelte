@@ -104,14 +104,7 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <p class="font-mono text-xs uppercase tracking-widest text-zinc-500">
-      <a href="{base}/" class="hover:text-zinc-700 hover:underline">
-        ← chinese-rhyme-finder
-      </a>
-    </p>
-    <h1 class="mt-2 text-3xl font-bold tracking-tight text-zinc-900">
-      反向分析
-    </h1>
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900">反向分析</h1>
     <p class="mt-2 text-base text-zinc-600">
       把歌词粘进来，看每行押什么、和哪些行相互押。
     </p>

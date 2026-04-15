@@ -43,12 +43,7 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <p class="font-mono text-xs uppercase tracking-widest text-zinc-500">
-      <a href="{base}/" class="hover:text-zinc-700 hover:underline">
-        ← chinese-rhyme-finder
-      </a>
-    </p>
-    <h1 class="mt-2 text-3xl font-bold tracking-tight text-zinc-900">
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900">
       Discover · 灵感发现
     </h1>
     <p class="mt-2 text-base text-zinc-600">
