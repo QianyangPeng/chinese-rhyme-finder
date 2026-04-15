@@ -16,8 +16,30 @@
   //   deep:     multi-push leaderboard, deepest K first
   //   cross:    cross-domain clusters (mixed tags across member phrases)
   //   gems:     hidden gems — high quality but few members (surprise factor)
+  //   poetry:   pure 唐诗/宋词 clusters — classical register isolated
+  //   modern:   non-idiom clusters — rap-ready register (idioms are minority)
   //   saved:    user's favorite clusters from localStorage
-  type Lens = 'featured' | 'deep' | 'cross' | 'gems' | 'saved';
+  type Lens = 'featured' | 'deep' | 'cross' | 'gems' | 'poetry' | 'modern' | 'saved';
+
+  /**
+   * Small corner badge on each member card identifying which source the
+   * phrase came from. Keeps the user aware of register at a glance:
+   * classical 成语 vs 歇后语 vs modern 网络词 all have different vibes.
+   */
+  const SOURCE_BADGES: Record<string, { label: string; cls: string }> = {
+    'xinhua-idiom':        { label: '成语', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
+    'xinhua-xiehouyu':     { label: '歇后', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200' },
+    'chinese-poetry/tang': { label: '唐诗', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' },
+    'chinese-poetry/song': { label: '宋词', cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200' },
+    'wiktionary-slang':    { label: '网络', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' }
+  };
+
+  function sourceBadge(source: string): { label: string; cls: string } {
+    return SOURCE_BADGES[source] ?? {
+      label: '语料',
+      cls: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+    };
+  }
 
   let toneMode = $state<ToneMode>('none');
   let minDepth = $state(2);
@@ -45,6 +67,8 @@
       lensParam === 'deep' ||
       lensParam === 'cross' ||
       lensParam === 'gems' ||
+      lensParam === 'poetry' ||
+      lensParam === 'modern' ||
       lensParam === 'saved'
     ) {
       lens = lensParam;
@@ -84,14 +108,17 @@
 
   // Mine a generous batch of clusters. Bucket cache is keyed by
   // (lexicon, scheme.id, toneMode, tailOnly) so flipping tone or filters
-  // stays cheap.
+  // stays cheap. Cap raised from 2000 → 8000 so lens-specific filters
+  // (poetry-only, non-idiom) can find enough post-filter survivors —
+  // the miner's cleverness ranker heavily favors tag-diverse clusters,
+  // which systematically pushes pure-register clusters below 2000.
   const rawCatalog = $derived(
     mineClusters(lexicon, scheme, {
       minPatternLength: minDepth,
       minMembers,
       tailOnly,
       toneMode,
-      maxClusters: 2000
+      maxClusters: 8000
     })
   );
 
@@ -111,6 +138,11 @@
       sum += rawCatalog.lexiconRef[m.phraseId].quality;
     }
     return sum / cluster.members.length;
+  }
+
+  /** All member sources for a cluster — used by poetry/modern lens filters. */
+  function memberSources(cluster: (typeof rawCatalog.clusters)[number]): string[] {
+    return cluster.members.map((m) => rawCatalog.lexiconRef[m.phraseId].source);
   }
 
   const catalog = $derived(
@@ -149,6 +181,46 @@
             .filter((c) => avgQuality(c) >= 0.8)
             .sort((a, b) => avgQuality(b) - avgQuality(a));
           break;
+        case 'poetry':
+          // Classical register: ≥2 poetry members, no 成语 members, no 网络词
+          // members. Requiring 100% poetry was too strict — poetry clusters
+          // rarely survive the top-200 cleverness cut against idiom-dominated
+          // peers, so we permit a small seed/xiehouyu mix (xiehouyu is often
+          // classical-flavored) while hard-excluding 成语 and 网络词 which
+          // break the register.
+          out = input
+            .filter((c) => {
+              const srcs = memberSources(c);
+              const poetryCount = srcs.filter((s) => s.startsWith('chinese-poetry/')).length;
+              const hasIdiom = srcs.includes('xinhua-idiom');
+              const hasSlang = srcs.includes('wiktionary-slang');
+              return poetryCount >= 2 && !hasIdiom && !hasSlang;
+            })
+            .sort((a, b) => {
+              const pa = memberSources(a).filter((s) => s.startsWith('chinese-poetry/')).length / a.members.length;
+              const pb = memberSources(b).filter((s) => s.startsWith('chinese-poetry/')).length / b.members.length;
+              if (pa !== pb) return pb - pa;
+              return b.cleverness - a.cleverness;
+            });
+          break;
+        case 'modern':
+          // Non-idiom clusters: directly address rap register gap. Require
+          // at least half the members come from non-成语 sources AND at
+          // least 2 non-idiom members exist (so a 3-idiom + 1-modern cluster
+          // doesn't sneak in). Sort by idiom-ratio ascending then cleverness.
+          out = input
+            .filter((c) => {
+              const srcs = memberSources(c);
+              const nonIdiom = srcs.filter((s) => s !== 'xinhua-idiom').length;
+              return nonIdiom >= 2 && nonIdiom / srcs.length >= 0.5;
+            })
+            .sort((a, b) => {
+              const ia = memberSources(a).filter((s) => s === 'xinhua-idiom').length / a.members.length;
+              const ib = memberSources(b).filter((s) => s === 'xinhua-idiom').length / b.members.length;
+              if (ia !== ib) return ia - ib;
+              return b.cleverness - a.cleverness;
+            });
+          break;
         case 'saved':
           // User favorites — keep cleverness order within the subset.
           out = input.filter((c) => favorites.has(c.id));
@@ -163,9 +235,11 @@
 
   const LENSES: Array<{ id: Lens; label: string; hint: string }> = [
     { id: 'featured', label: '精选推荐', hint: '按巧妙度综合排序' },
+    { id: 'modern',   label: '非成语',   hint: '成员以现代口语/歇后/网络词为主 — 更接近 rap 语感' },
     { id: 'deep',     label: '多押榜',   hint: '最深的多押模式优先' },
     { id: 'cross',    label: '跨域押韵', hint: '成员来自多个语料域' },
     { id: 'gems',     label: '冷门明珠', hint: '高质量但成员少的惊喜组合' },
+    { id: 'poetry',   label: '唐诗宋词', hint: '纯古典诗词片段 cluster — 与现代隔离展示' },
     { id: 'saved',    label: '我的收藏', hint: '保存到本地的 cluster（localStorage）' }
   ];
 
@@ -379,7 +453,14 @@
               {@const chars = [...phrase.text]}
               {@const matchStart = phrase.length - cluster.patternLength - m.tailOffset}
               {@const matchEnd = phrase.length - m.tailOffset}
-              <li class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2">
+              {@const badge = sourceBadge(phrase.source)}
+              <li class="relative rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2 pt-4">
+                <span
+                  class="absolute right-1 top-1 rounded px-1 py-0.5 font-mono text-[9px] leading-none {badge.cls}"
+                  title="来源：{phrase.source}"
+                >
+                  {badge.label}
+                </span>
                 <div class="flex items-end gap-[3px]">
                   {#each chars as ch, i (i)}
                     {@const inMatch = i >= matchStart && i < matchEnd}
