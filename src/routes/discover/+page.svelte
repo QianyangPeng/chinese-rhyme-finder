@@ -1,7 +1,11 @@
 <script lang="ts">
   import { ALL_SCHEMES, getScheme } from '$lib/core/rhyme';
   import type { RhymeSchemeId } from '$lib/core/rhyme';
-  import { getDefaultLexicon } from '$lib/core/corpus';
+  import {
+    getCurrentLexicon,
+    ensureExtendedLexicon
+  } from '$lib/core/corpus';
+  import type { Lexicon } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
@@ -11,6 +15,8 @@
   let minMembers = $state(3);
   let tailOnly = $state(true);
   let urlReady = $state(false);
+  let lexicon = $state<Lexicon>(getCurrentLexicon());
+  let extendedLoading = $state(false);
 
   // URL-based state overrides applied only after mount to avoid touching
   // searchParams during SvelteKit's build-time prerender.
@@ -25,6 +31,18 @@
     if (Number.isFinite(m) && m >= 2) minMembers = m;
     if (t === 'all') tailOnly = false;
     urlReady = true;
+
+    // If not already loaded, show a loading hint and swap in when ready.
+    if (lexicon.phrases.length < 5000) {
+      extendedLoading = true;
+      ensureExtendedLexicon(base)
+        .then((lex) => {
+          lexicon = lex;
+        })
+        .finally(() => {
+          extendedLoading = false;
+        });
+    }
   });
 
   // Mirror state → URL for sharing.
@@ -42,7 +60,6 @@
     }
   });
 
-  const lexicon = getDefaultLexicon();
   const scheme = $derived(getScheme(schemeId));
 
   const catalog = $derived(
@@ -50,7 +67,7 @@
       minPatternLength: minDepth,
       minMembers,
       tailOnly,
-      maxClusters: 60
+      maxClusters: 200
     })
   );
 
@@ -83,11 +100,20 @@
     </p>
   </header>
 
-  <!-- Bootstrap notice -->
-  <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-    种子词库只有 {lexicon.phrases.length} 条，cluster 数量受限。Phase 1.4
-    Python 数据管道扩到 50k+ 后，Discover 才真正发挥作用。
-  </div>
+  <!-- Lexicon status -->
+  {#if extendedLoading}
+    <div class="mb-5 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
+      正在加载完整词库（3~5 MB 的成语数据集）… 先用 {lexicon.phrases.length} 条种子渲染，一会儿会自动切到完整版。
+    </div>
+  {:else if lexicon.phrases.length >= 5000}
+    <div class="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
+      词库已加载 <span class="font-semibold">{lexicon.phrases.length}</span> 条（种子 + 新华成语）。
+    </div>
+  {:else}
+    <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
+      目前只用 {lexicon.phrases.length} 条种子词库（扩展词库未加载成功）。cluster 数量受限。
+    </div>
+  {/if}
 
   <!-- Controls -->
   <div class="mb-6 grid gap-3 sm:grid-cols-4">

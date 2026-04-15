@@ -46,9 +46,11 @@ data/raw/
 !data/.gitkeep
 !data/README.md
 
-# Python pipeline output — generated, not committed (regenerate with
-# `python -m pipeline.build` from the scripts/ folder).
-static/data/
+# Python pipeline output — now committed via `node scripts/build_lexicon.mjs`
+# so GitHub Pages serves it. (Kept the entry removed intentionally.)
+
+# Node build-lexicon cache of upstream source data (tens of MB each)
+scripts/.cache/
 
 # Vite cache
 .vite/

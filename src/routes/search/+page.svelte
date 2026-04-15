@@ -2,7 +2,13 @@
   import { parseSyllables } from '$lib/core/pinyin';
   import { ALL_SCHEMES, getScheme } from '$lib/core/rhyme';
   import type { RhymeSchemeId } from '$lib/core/rhyme';
-  import { getDefaultLexicon, searchByFinals, searchByTail } from '$lib/core/corpus';
+  import {
+    getCurrentLexicon,
+    ensureExtendedLexicon,
+    searchByFinals,
+    searchByTail
+  } from '$lib/core/corpus';
+  import type { Lexicon } from '$lib/core/corpus';
   type SearchMode = 'full' | 'tail';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
@@ -23,6 +29,11 @@
     if (s === 'strict' || s === 'shisanzhe' || s === 'loose') schemeId = s;
     if (m === 'tail') mode = 'tail';
     urlReady = true;
+
+    // Fire-and-forget: swap in the big lexicon once it loads.
+    ensureExtendedLexicon(base).then((lex) => {
+      lexicon = lex;
+    });
   });
 
   // Mirror state back into the URL so results are shareable. Waits until
@@ -52,7 +63,11 @@
   }
 
   const scheme = $derived(getScheme(schemeId));
-  const lexicon = getDefaultLexicon(); // built once, cached
+
+  // Start with whatever's cached (seed on first render, extended on
+  // subsequent route visits). Then kick off the async fetch+merge so
+  // the big xinhua idiom corpus becomes available.
+  let lexicon = $state<Lexicon>(getCurrentLexicon());
 
   const querySyllables = $derived(parseSyllables(query));
   const queryFinals = $derived(querySyllables.map((s) => s.final));

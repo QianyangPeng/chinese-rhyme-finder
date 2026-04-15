@@ -2,19 +2,26 @@
   import { parseSyllables } from '$lib/core/pinyin';
   import { ALL_SCHEMES, matchFull, shisanzheScheme } from '$lib/core/rhyme';
   import type { Syllable } from '$lib/core/pinyin';
-  import { getDefaultLexicon } from '$lib/core/corpus';
+  import { getCurrentLexicon, ensureExtendedLexicon } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
+  import { onMount } from 'svelte';
 
-  // Live engine stats — computed once at module load so the home page
-  // reflects the current lexicon without the user having to hunt for it.
-  const _lex = getDefaultLexicon();
-  const _clusterCat = mineClusters(_lex, shisanzheScheme);
-  const STATS = {
-    phrases: _lex.phrases.length,
-    clusters: _clusterCat.clusters.length,
+  // Stats are reactive — start with seed numbers, swap in big-lexicon
+  // numbers once the async fetch completes.
+  let lexicon = $state(getCurrentLexicon());
+  const clusterCount = $derived(mineClusters(lexicon, shisanzheScheme).clusters.length);
+  const STATS = $derived({
+    phrases: lexicon.phrases.length,
+    clusters: clusterCount,
     schemes: ALL_SCHEMES.length
-  };
+  });
+
+  onMount(() => {
+    ensureExtendedLexicon(base).then((lex) => {
+      lexicon = lex;
+    });
+  });
 
   // Two phrases to analyze. Defaults are the canonical Capper example
   // ("姜维的戏" vs "降维打击") that motivated the whole project — they show
