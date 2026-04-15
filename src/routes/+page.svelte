@@ -8,9 +8,12 @@
   import { onMount } from 'svelte';
 
   // Stats are reactive — start with seed numbers, swap in big-lexicon
-  // numbers once the async fetch completes.
+  // numbers once the async fetch completes. Use maxClusters=Infinity
+  // here because this is a headline stat, not a render list.
   let lexicon = $state(getCurrentLexicon());
-  const clusterCount = $derived(mineClusters(lexicon, shisanzheScheme).clusters.length);
+  const clusterCount = $derived(
+    mineClusters(lexicon, shisanzheScheme, { maxClusters: Infinity }).clusters.length
+  );
   const STATS = $derived({
     phrases: lexicon.phrases.length,
     clusters: clusterCount,
