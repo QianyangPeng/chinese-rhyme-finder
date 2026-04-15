@@ -9,13 +9,15 @@
   import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
+  import { favorites } from '$lib/stores/favorites.svelte';
 
   // Discovery "lens" — the viewpoint the user is browsing through.
   //   featured: default, ordered by cleverness
   //   deep:     multi-push leaderboard, deepest K first
   //   cross:    cross-domain clusters (mixed tags across member phrases)
   //   gems:     hidden gems — high quality but few members (surprise factor)
-  type Lens = 'featured' | 'deep' | 'cross' | 'gems';
+  //   saved:    user's favorite clusters from localStorage
+  type Lens = 'featured' | 'deep' | 'cross' | 'gems' | 'saved';
 
   let schemeId = $state<RhymeSchemeId>('xinyun');
   let minDepth = $state(2);
@@ -39,7 +41,12 @@
     if (Number.isFinite(m) && m >= 2) minMembers = m;
     if (t === 'all') tailOnly = false;
     const lensParam = params.get('lens');
-    if (lensParam === 'deep' || lensParam === 'cross' || lensParam === 'gems') {
+    if (
+      lensParam === 'deep' ||
+      lensParam === 'cross' ||
+      lensParam === 'gems' ||
+      lensParam === 'saved'
+    ) {
       lens = lensParam;
     }
     urlReady = true;
@@ -142,6 +149,10 @@
             .filter((c) => avgQuality(c) >= 0.8)
             .sort((a, b) => avgQuality(b) - avgQuality(a));
           break;
+        case 'saved':
+          // User favorites — keep cleverness order within the subset.
+          out = input.filter((c) => favorites.has(c.id));
+          break;
         case 'featured':
         default:
           out = input; // already cleverness-sorted by the miner
@@ -154,7 +165,8 @@
     { id: 'featured', label: '精选推荐', hint: '按巧妙度综合排序' },
     { id: 'deep',     label: '多押榜',   hint: '最深的多押模式优先' },
     { id: 'cross',    label: '跨域押韵', hint: '成员来自多个语料域' },
-    { id: 'gems',     label: '冷门明珠', hint: '高质量但成员少的惊喜组合' }
+    { id: 'gems',     label: '冷门明珠', hint: '高质量但成员少的惊喜组合' },
+    { id: 'saved',    label: '我的收藏', hint: '保存到本地的 cluster（localStorage）' }
   ];
 
   /** Render at most 5 stars based on cleverness (raw value rescaled). */
@@ -287,7 +299,11 @@
   <!-- Cluster cards -->
   {#if catalog.clusters.length === 0}
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center text-sm text-zinc-500">
-      当前条件下没有 cluster — 试试调低"最少成员"或"押韵深度"。
+      {#if lens === 'saved'}
+        还没有收藏的 cluster —— 去其它透镜逛一逛，看到喜欢的点 <span class="mx-1 align-middle">♡</span> 收藏它。
+      {:else}
+        当前条件下没有 cluster — 试试调低"最少成员"或"押韵深度"。
+      {/if}
     </div>
   {:else}
     <div class="space-y-3">
@@ -320,18 +336,32 @@
                 {/if}
               </p>
             </div>
-            <button
-              class="shrink-0 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900"
-              title="复制成员列表"
-              onclick={() =>
-                copyText(
-                  cluster.members
-                    .map((m) => catalog.lexiconRef[m.phraseId].text)
-                    .join(' / ')
-                )}
-            >
-              复制
-            </button>
+            <div class="flex shrink-0 gap-1">
+              <button
+                class="rounded border px-2 py-1 text-xs transition {favorites.has(
+                  cluster.id
+                )
+                  ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300'
+                  : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+                title={favorites.has(cluster.id) ? '取消收藏' : '收藏这个 cluster'}
+                aria-pressed={favorites.has(cluster.id)}
+                onclick={() => favorites.toggle(cluster.id)}
+              >
+                {favorites.has(cluster.id) ? '❤️ 已收藏' : '♡ 收藏'}
+              </button>
+              <button
+                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                title="复制成员列表"
+                onclick={() =>
+                  copyText(
+                    cluster.members
+                      .map((m) => catalog.lexiconRef[m.phraseId].text)
+                      .join(' / ')
+                  )}
+              >
+                复制
+              </button>
+            </div>
           </header>
 
           <ul class="flex flex-wrap gap-2">
