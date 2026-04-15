@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ALL_SCHEMES, getScheme } from '$lib/core/rhyme';
-  import type { RhymeSchemeId } from '$lib/core/rhyme';
+  import { ALL_SCHEMES, getScheme, TONE_MODE_LABEL } from '$lib/core/rhyme';
+  import type { RhymeSchemeId, ToneMode } from '$lib/core/rhyme';
   import { reverseAnalyze } from '$lib/core/analyze';
   import { base } from '$app/paths';
 
@@ -11,9 +11,12 @@
 
   let text = $state(DEFAULT_TEXT);
   let schemeId = $state<RhymeSchemeId>('xinyun');
+  let toneMode = $state<ToneMode>('none');
 
   const scheme = $derived(getScheme(schemeId));
-  const analysis = $derived(reverseAnalyze(text, scheme));
+  const analysis = $derived(reverseAnalyze(text, scheme, toneMode));
+
+  const TONE_MODES: ToneMode[] = ['none', 'pingze', 'exact'];
 
   // Soft pastel palette — matched syllables in the same rhyme group get
   // the same background tint. Cycle through these 6 colors.
@@ -154,6 +157,28 @@
         onclick={() => (schemeId = s.id)}
       >
         {s.name}
+      </button>
+    {/each}
+  </div>
+
+  <!-- Tone-mode selector: how strict should声调 matter for a rhyme? -->
+  <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+    <span class="text-zinc-500">声调：</span>
+    {#each TONE_MODES as m (m)}
+      <button
+        class="rounded border px-2.5 py-1 text-xs transition {toneMode === m
+          ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+          : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+        title={
+          m === 'none'
+            ? '只比 韵母 — 最常见的 rap 判准'
+            : m === 'pingze'
+              ? '韵母 + 平仄 — 平(1/2)与仄(3/4/0)不通押'
+              : '韵母 + 声调数字 — 每个音节声调必须一致'
+        }
+        onclick={() => (toneMode = m)}
+      >
+        {TONE_MODE_LABEL[m]}
       </button>
     {/each}
   </div>

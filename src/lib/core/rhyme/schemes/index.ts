@@ -13,19 +13,27 @@ export { SHISANZHE, SHISANZHE_TABLE } from './shisanzhe.js';
 export { XINYUN, XINYUN_TABLE } from './xinyun.js';
 
 /**
- * Shipped schemes, listed in the order users see them. 中华新韵 is
- * listed FIRST (and is the default) because it represents modern
- * Mandarin rhyme perception authoritatively. 十三辙 kept for 曲艺
- * users, 严式 for pedagogical strictness, 宽松 for aggressive rap.
+ * Shipped schemes, listed from strictest to loosest — that's how the
+ * Search / Discover / Analyze UIs lay them out and how most users think
+ * about rhyme precision.
+ *
+ * 严式 is first because it's the reference standard (韵母 must match
+ * character-for-character; it already distinguishes apical 只/zhi from
+ * regular 李/li because they decompose to different final strings).
+ *
+ * 中华新韵 is the DEFAULT because it's the modern Mandarin authority
+ * and matches ear perception for the vast majority of rap use cases.
+ * 十三辙 is the曲艺 tradition (unifies 一七 + 支). 宽松 adds cross-辙
+ * bridges on top of 十三辙 for aggressive rap.
  */
 export const ALL_SCHEMES: ReadonlyArray<RhymeScheme> = [
+  strictScheme,
   xinyunScheme,
   shisanzheScheme,
-  strictScheme,
   looseScheme
 ];
 
-/** The default scheme for new queries. */
+/** The default scheme for new queries — modern Mandarin ear perception. */
 export const DEFAULT_SCHEME_ID: RhymeSchemeId = 'xinyun';
 
 const BY_ID: Readonly<Record<RhymeSchemeId, RhymeScheme>> = {

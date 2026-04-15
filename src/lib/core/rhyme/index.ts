@@ -35,3 +35,11 @@ export {
   nonEmptyBins
 } from './relaxation.js';
 export type { RelaxationBin, RelaxationResult } from './relaxation.js';
+
+export {
+  composeKey,
+  syllablesToKeys,
+  toneToPingze,
+  TONE_MODE_LABEL
+} from './tone.js';
+export type { ToneMode } from './tone.js';

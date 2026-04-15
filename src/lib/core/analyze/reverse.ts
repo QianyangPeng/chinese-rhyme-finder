@@ -20,6 +20,7 @@
 
 import { parseSyllables } from '../pinyin/parser.js';
 import type { RhymeScheme } from '../rhyme/types.js';
+import { composeKey, type ToneMode } from '../rhyme/tone.js';
 import type {
   LineAnalysis,
   ReverseAnalysis,
@@ -114,15 +115,27 @@ function computeInternalGroups(
   return all;
 }
 
-/** Run reverse analysis on a passage of (potentially multi-line) text. */
+/**
+ * Run reverse analysis on a passage of (potentially multi-line) text.
+ *
+ * @param toneMode
+ *   'none' (default): match on 韵母 only — how most rap rhymes.
+ *   'pingze':         require the 平仄 category to also agree.
+ *   'exact':          require the exact tone number to also agree.
+ *   When the user enables a tone mode, positions that would otherwise
+ *   match are held to the stricter standard; this typically lowers
+ *   maxTailK but the pairs that remain are the tightest rhymes in the
+ *   passage.
+ */
 export function reverseAnalyze(
   text: string,
-  scheme: RhymeScheme
+  scheme: RhymeScheme,
+  toneMode: ToneMode = 'none'
 ): ReverseAnalysis {
   const rawLines = text.split(/\r?\n/);
   const lines: LineAnalysis[] = rawLines.map((lineText, index) => {
     const syllables = parseSyllables(lineText);
-    const keys = syllables.map((s) => scheme.keyOf(s.final));
+    const keys = syllables.map((s) => composeKey(s.final, s.tone, scheme, toneMode));
     const internalGroups = computeInternalGroups(keys);
     return { text: lineText, index, syllables, keys, internalGroups };
   });

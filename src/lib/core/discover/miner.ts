@@ -32,7 +32,11 @@ export interface MineOptions {
 const DEFAULT_OPTS = {
   minMembers: 3,
   minPatternLength: 2,
-  maxPatternLength: 6,
+  // Raised from 6 to 10 so 5/6/7/8-character idioms and xiehouyu
+  // answers can form deep multi-押 clusters when enough of them share
+  // a tail. Cache is per-(lexicon, scheme), so the one-time cost of
+  // scanning longer K-grams is amortized across filter clicks.
+  maxPatternLength: 10,
   maxClusters: 200,
   tailOnly: true
 } as const;
