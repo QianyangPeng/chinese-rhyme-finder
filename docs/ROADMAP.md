@@ -50,20 +50,22 @@
 - [x] phonology 强校验（已嵌在 corpus/loader 里）
 - [x] 排序（按 quality desc + 文本字典序，stable）
 
-### P1.6 Cluster 挖掘（Python 离线 + 前端展示）
+### P1.6 Cluster 挖掘 ✅
 
-- [ ] `scripts/discover/cluster_miner.py` — 扫描词库，按 K-gram 分桶
-- [ ] `scripts/discover/cleverness.py` — 实现 D-006 巧妙度公式
-- [ ] `data/clusters-v0.bin` — 预排序的 cluster catalog
-- [ ] `src/core/discover/loader.ts` — 加载并按透镜筛选
+- [x] `src/lib/core/discover/miner.ts` — TypeScript 版 cluster 挖掘（200 词条数十毫秒级）
+- [x] `src/lib/core/discover/types.ts` — RhymeCluster / ClusterCatalog
+- [x] D-006 巧妙度公式（avgQuality × diversity × log(K) × memberBonus）
+- [x] 7 单元测试，含合成数据 + seed 数据 smoke
+- [ ] Python 版离线挖掘（待 P1.4 词库扩充后再做，避免运行时压力）
+- [ ] 预排序 cluster catalog 二进制（同上）
 
-### P1.7 Discover UI（依赖 P1.6）
+### P1.7 Discover UI ✅（基础版）
 
-- [ ] `src/routes/+page.svelte` — Discover 主页（瀑布流卡片）
-- [ ] `src/lib/components/ClusterCard.svelte` — 押韵 cluster 卡片
-- [ ] `src/lib/components/LensTabs.svelte` — 4 个透镜切换：精选今日 / 未被发现的宝藏 / 多押排行榜 / 主题押韵集
-- [ ] `src/lib/components/RhymeVisual.svelte` — 韵母色块高亮
-- [ ] localStorage 收藏
+- [x] `src/routes/discover/+page.svelte` — Discover 页面 + cluster 卡片列表
+- [x] 实时调节：scheme / 最低押韵深度 / 最少成员 / 仅尾部 vs 全位置
+- [x] 一键复制 cluster 成员列表
+- [ ] 4 个发现透镜（精选今日 / 未被发现的宝藏 / 多押排行榜 / 主题押韵集）— 推迟到 Phase 2
+- [ ] localStorage 收藏 — 推迟到 Phase 2
 
 ### P1.8 Search UI（依赖 P1.5）✅
 

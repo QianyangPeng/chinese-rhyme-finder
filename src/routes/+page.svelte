@@ -232,9 +232,14 @@
     <h2 class="mb-3 text-xl font-semibold text-zinc-900">三种模式</h2>
     <ul class="space-y-2 text-sm text-zinc-700">
       <li>
-        <span class="font-semibold">🔥 Discover</span>
-        <span class="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">P0 · 开发中</span>
-        — 系统主动展示算法挖掘的押韵 cluster，按巧妙度排序
+        <a
+          href="{base}/discover"
+          class="font-semibold text-zinc-900 underline hover:text-zinc-700"
+        >
+          🔥 Discover →
+        </a>
+        <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-700">就绪</span>
+        — 算法主动挖掘的押韵 cluster，按巧妙度排序（种子库版本，词库扩充后效果更显著）
       </li>
       <li>
         <a
