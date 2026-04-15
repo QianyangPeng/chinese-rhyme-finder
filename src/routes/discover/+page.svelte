@@ -10,10 +10,18 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
 
+  // Discovery "lens" — the viewpoint the user is browsing through.
+  //   featured: default, ordered by cleverness
+  //   deep:     multi-push leaderboard, deepest K first
+  //   cross:    cross-domain clusters (mixed tags across member phrases)
+  //   gems:     hidden gems — high quality but few members (surprise factor)
+  type Lens = 'featured' | 'deep' | 'cross' | 'gems';
+
   let schemeId = $state<RhymeSchemeId>('xinyun');
   let minDepth = $state(2);
   let minMembers = $state(3);
   let tailOnly = $state(true);
+  let lens = $state<Lens>('featured');
   let urlReady = $state(false);
   let lexicon = $state<Lexicon>(getCurrentLexicon());
   let extendedLoading = $state(false);
@@ -30,6 +38,10 @@
     if (Number.isFinite(d) && d >= 1) minDepth = d;
     if (Number.isFinite(m) && m >= 2) minMembers = m;
     if (t === 'all') tailOnly = false;
+    const lensParam = params.get('lens');
+    if (lensParam === 'deep' || lensParam === 'cross' || lensParam === 'gems') {
+      lens = lensParam;
+    }
     urlReady = true;
 
     // If not already loaded, show a loading hint and swap in when ready.
@@ -53,6 +65,7 @@
     if (minDepth !== 2) qp.set('depth', String(minDepth));
     if (minMembers !== 3) qp.set('members', String(minMembers));
     if (!tailOnly) qp.set('tail', 'all');
+    if (lens !== 'featured') qp.set('lens', lens);
     const qs = qp.toString();
     const url = `${base}/discover/${qs ? '?' + qs : ''}`;
     if (window.location.pathname + window.location.search !== url) {
@@ -62,14 +75,87 @@
 
   const scheme = $derived(getScheme(schemeId));
 
-  const catalog = $derived(
+  // Mine a generous batch of clusters (cleverness-sorted), then let the
+  // active lens re-filter / re-sort the list client-side. The bucket
+  // cache in miner.ts makes repeat calls with the same (scheme, tailOnly)
+  // cheap (~15ms on 30k lexicon).
+  const rawCatalog = $derived(
     mineClusters(lexicon, scheme, {
       minPatternLength: minDepth,
       minMembers,
       tailOnly,
-      maxClusters: 200
+      maxClusters: 2000
     })
   );
+
+  // Generic tags carried by most xinhua entries — don't count them as
+  // "domain" for the cross-domain lens or nothing would filter.
+  const MUNDANE_TAGS = new Set(['idiom', 'xinhua']);
+
+  function specificTags(
+    cluster: (typeof rawCatalog.clusters)[number]
+  ): string[] {
+    return cluster.distinctTags.filter((t) => !MUNDANE_TAGS.has(t));
+  }
+
+  function avgQuality(cluster: (typeof rawCatalog.clusters)[number]) {
+    let sum = 0;
+    for (const m of cluster.members) {
+      sum += rawCatalog.lexiconRef[m.phraseId].quality;
+    }
+    return sum / cluster.members.length;
+  }
+
+  const catalog = $derived(
+    (() => {
+      const input = rawCatalog.clusters;
+      let out: typeof input;
+      switch (lens) {
+        case 'deep':
+          // Multi-push leaderboard: deepest first, cleverness breaks ties.
+          out = [...input].sort((a, b) => {
+            if (b.patternLength !== a.patternLength)
+              return b.patternLength - a.patternLength;
+            return b.cleverness - a.cleverness;
+          });
+          break;
+        case 'cross':
+          // Cross-domain: require the cluster to span at least one tag
+          // BEYOND the generic [idiom, xinhua] pair — i.e. at least one
+          // member must carry a specific-domain tag (scifi, modern,
+          // sanguo, classical, …), which in practice means it pulls in
+          // something from the curated seed corpus next to the xinhua
+          // idioms. Sort by specific-tag count desc then cleverness.
+          out = input
+            .filter((c) => specificTags(c).length >= 1)
+            .sort((a, b) => {
+              const sa = specificTags(a).length;
+              const sb = specificTags(b).length;
+              if (sb !== sa) return sb - sa;
+              return b.cleverness - a.cleverness;
+            });
+          break;
+        case 'gems':
+          // Hidden gems: high quality + small membership (surprise factor).
+          out = input
+            .filter((c) => c.members.length >= 3 && c.members.length <= 6)
+            .filter((c) => avgQuality(c) >= 0.8)
+            .sort((a, b) => avgQuality(b) - avgQuality(a));
+          break;
+        case 'featured':
+        default:
+          out = input; // already cleverness-sorted by the miner
+      }
+      return { ...rawCatalog, clusters: out.slice(0, 200) };
+    })()
+  );
+
+  const LENSES: Array<{ id: Lens; label: string; hint: string }> = [
+    { id: 'featured', label: '精选推荐', hint: '按巧妙度综合排序' },
+    { id: 'deep',     label: '多押榜',   hint: '最深的多押模式优先' },
+    { id: 'cross',    label: '跨域押韵', hint: '成员来自多个语料域' },
+    { id: 'gems',     label: '冷门明珠', hint: '高质量但成员少的惊喜组合' }
+  ];
 
   /** Render at most 5 stars based on cleverness (raw value rescaled). */
   function stars(cleverness: number): string {
@@ -114,6 +200,21 @@
       目前只用 {lexicon.phrases.length} 条种子词库（扩展词库未加载成功）。cluster 数量受限。
     </div>
   {/if}
+
+  <!-- Lens tabs -->
+  <div class="mb-5 flex flex-wrap gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-1">
+    {#each LENSES as L (L.id)}
+      <button
+        class="flex-1 rounded px-3 py-1.5 text-xs font-semibold transition {lens === L.id
+          ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'}"
+        title={L.hint}
+        onclick={() => (lens = L.id)}
+      >
+        {L.label}
+      </button>
+    {/each}
+  </div>
 
   <!-- Controls -->
   <div class="mb-6 grid gap-3 sm:grid-cols-4">
