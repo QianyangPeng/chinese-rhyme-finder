@@ -50,6 +50,14 @@ const CI300_URL =
   'https://raw.githubusercontent.com/chinese-poetry/chinese-poetry/master/%E5%AE%8B%E8%AF%8D/%E5%AE%8B%E8%AF%8D%E4%B8%89%E7%99%BE%E9%A6%96.json';
 const CI300_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'ci300.json');
 
+// Wiktionary 漢語網路用語 category — ~280 modern internet/slang terms.
+// CC-BY-SA licensed per Wiktionary's content license.
+const WIKT_SLANG_URL =
+  'https://zh.wiktionary.org/w/api.php?action=query&list=categorymembers' +
+  '&cmtitle=Category:%E6%BC%A2%E8%AA%9E%E7%B6%B2%E8%B7%AF%E7%94%A8%E8%AA%9E' +
+  '&cmlimit=500&format=json';
+const WIKT_SLANG_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'wiktionary-slang.json');
+
 // ─── CLI parsing ───────────────────────────────────────────────────────
 
 const argv = process.argv.slice(2);
@@ -68,6 +76,7 @@ const MAX_ENTRIES = flags.max ? parseInt(String(flags.max), 10) : Infinity;
 const SKIP_DOWNLOAD = !!flags['no-download'];
 const SKIP_XIEHOUYU = !!flags['no-xiehouyu'];
 const SKIP_POETRY = !!flags['no-poetry'];
+const SKIP_SLANG = !!flags['no-slang'];
 
 // ─── Fetch helpers ─────────────────────────────────────────────────────
 
@@ -483,6 +492,83 @@ function processPoemFragments(rawPoems, era, needsSimplification) {
   return out;
 }
 
+// ─── Wiktionary 網路用語 ────────────────────────────────────────────
+//
+// Pulls the ~280 article titles under Category:漢語網路用語 from
+// zh.wiktionary (CC-BY-SA, public API). These are exactly the kind of
+// modern / internet / meme slang that was missing from 成语-heavy
+// corpora. Source text is 繁體; we run it through opencc → 简体.
+
+const SLANG_FILLER_STARTS = ['的', '了', '是', '就', '也', '又', '还', '都'];
+
+function scoreSlangEntry(text) {
+  let score = 0.72;
+  const n = text.length;
+  if (n === 3 || n === 4) score += 0.12;
+  else if (n === 2 || n === 5) score += 0.08;
+  else if (n === 6) score += 0.04;
+  else if (n === 7) score += 0.02;
+  else score -= 0.1;
+
+  if (SLANG_FILLER_STARTS.some((f) => text.startsWith(f))) score -= 0.08;
+  if (/[了啊呢吗的呀]$/.test(text) && n <= 3) score -= 0.12;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function processSlangEntry(rawTitle) {
+  if (!rawTitle) return null;
+  // Pre-filter: must have at least 2 Chinese chars
+  const chinese = chineseCharCount(rawTitle);
+  if (chinese < 2) return null;
+  // Convert 繁 → 简 so users see consistent text
+  const text = tradToSimp(rawTitle).trim();
+  if (text.length < 2 || text.length > 8) return null;
+
+  const py = pinyin(text, {
+    type: 'array',
+    toneType: 'symbol',
+    multiple: false
+  });
+  const finals = py.map(extractFinal);
+  // slang may contain English letters mixed in — skip if any syllable
+  // has no valid final.
+  if (finals.some((f) => !f || !VALID_FINALS.has(f))) return null;
+
+  const quality = scoreSlangEntry(text);
+  if (quality < 0.55) return null;
+
+  return {
+    text,
+    finals,
+    length: finals.length,
+    quality: Math.round(quality * 10000) / 10000,
+    tags: ['modern', 'slang', 'wiktionary'],
+    source: 'wiktionary-slang'
+  };
+}
+
+async function loadSlangEntries() {
+  let source;
+  if (fs.existsSync(WIKT_SLANG_CACHE)) {
+    source = WIKT_SLANG_CACHE;
+  } else if (SKIP_DOWNLOAD) {
+    return [];
+  } else {
+    try {
+      console.error(`[slang] downloading ${WIKT_SLANG_URL}`);
+      await downloadToFile(WIKT_SLANG_URL, WIKT_SLANG_CACHE);
+      source = WIKT_SLANG_CACHE;
+    } catch (err) {
+      console.error(`[slang] fetch failed: ${err.message}`);
+      return [];
+    }
+  }
+  const raw = JSON.parse(await fsp.readFile(source, 'utf-8'));
+  const members = raw?.query?.categorymembers ?? [];
+  return members.map((m) => m.title).filter(Boolean);
+}
+
 /** Load + extract fragments from 唐诗三百首 + 宋词三百首.
  *  Returns an array of phrase records, possibly empty on fetch failure. */
 async function loadPoetryFragments() {
@@ -584,6 +670,31 @@ async function main() {
     }
     console.error(
       `[poetry build] added ${poKept}, dropped ${poDup} (dup)`
+    );
+  }
+
+  // ─── Fourth source: Wiktionary 網路用語 (modern slang) ──────────────
+  if (!SKIP_SLANG && records.length < MAX_ENTRIES) {
+    const titles = await loadSlangEntries();
+    console.error(`[slang] ${titles.length} raw titles`);
+    let slangKept = 0, slangDrop = 0, slangDup = 0;
+    for (const title of titles) {
+      const rec = processSlangEntry(title);
+      if (!rec) {
+        slangDrop++;
+        continue;
+      }
+      if (seen.has(rec.text)) {
+        slangDup++;
+        continue;
+      }
+      seen.add(rec.text);
+      records.push(rec);
+      slangKept++;
+      if (records.length >= MAX_ENTRIES) break;
+    }
+    console.error(
+      `[slang build] added ${slangKept}, dropped ${slangDrop} (unparseable) + ${slangDup} (dup)`
     );
   }
 
