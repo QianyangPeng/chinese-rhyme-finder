@@ -53,17 +53,37 @@
     return maxK;
   }
 
-  /** Visual size class for a chip given the syllable index in its line. */
+  /**
+   * A syllable's chip styling has three levels:
+   *   TAIL — in the cross-line tail rhyme (last K positions). Strong tint + ring.
+   *   INTERNAL — elsewhere in the line but shares the line's end-rhyme key
+   *              (internal rhyme). Lighter tint (opacity reduced).
+   *   NONE — doesn't match the end key / no group. Neutral gray.
+   */
   function chipClass(lineIndex: number, sylIndex: number, totalSyls: number): string {
+    const colorIdx = lineColorMap[lineIndex];
+    if (colorIdx === undefined) {
+      return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300 dark:bg-zinc-800';
+    }
+    const tint = GROUP_TINTS[colorIdx];
     const tailDepth = tailDepthForLine(lineIndex);
     const isInTail = sylIndex >= totalSyls - tailDepth && tailDepth > 0;
-    const colorIdx = lineColorMap[lineIndex];
-    if (isInTail && colorIdx !== undefined) {
-      const tint = GROUP_TINTS[colorIdx];
+    if (isInTail) {
       return `${tint.bg} ${tint.text} ring-1 ${tint.ring}`;
     }
-    return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300';
+    // Internal rhyme: syllable matches the line's end-rhyme key but isn't
+    // in the cross-line tail window.
+    const line = analysis.lines[lineIndex];
+    const endKey = line.keys[line.keys.length - 1];
+    if (endKey && line.keys[sylIndex] === endKey) {
+      return `${tint.bg} ${tint.text} opacity-70`;
+    }
+    return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300 dark:bg-zinc-800';
   }
+
+  const internalRhymeLineCount = $derived(
+    analysis.lines.filter((l) => l.internalGroups.size > 0).length
+  );
 
   function presetExample(t: string) {
     text = t;
@@ -170,6 +190,12 @@
       {/if}
     </div>
   </section>
+
+  {#if internalRhymeLineCount > 0}
+    <p class="-mt-2 mb-4 text-xs text-zinc-500">
+      其中 <span class="font-semibold text-zinc-700 dark:text-zinc-300">{internalRhymeLineCount}</span> 行有内部重复押韵（同行多位同韵，不只末尾）— 浅色色块标出。
+    </p>
+  {/if}
 
   <!-- Per-line view with color-coded chips -->
   <section class="mt-6">

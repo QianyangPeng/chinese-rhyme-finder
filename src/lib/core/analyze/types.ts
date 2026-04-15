@@ -20,6 +20,13 @@ export interface LineAnalysis {
   readonly syllables: readonly Syllable[];
   /** Per-syllable rhyme-group key under the active scheme. */
   readonly keys: readonly string[];
+  /**
+   * Within-line repeated rhyme groups: rhyme key → positions where it
+   * occurs. Only groups with ≥2 positions are retained (= internal
+   * rhyme). Empty if the line has no internal rhymes. Useful for
+   * coloring matching syllables the same way inside one line.
+   */
+  readonly internalGroups: ReadonlyMap<string, readonly number[]>;
 }
 
 /**

@@ -5,7 +5,11 @@ import { strictScheme, shisanzheScheme } from '../rhyme/schemes/index.js';
 describe('reverseAnalyze · empty / trivial inputs', () => {
   it('handles empty input gracefully', () => {
     const r = reverseAnalyze('', strictScheme);
-    expect(r.lines).toEqual([{ text: '', index: 0, syllables: [], keys: [] }]);
+    expect(r.lines).toHaveLength(1);
+    expect(r.lines[0].text).toBe('');
+    expect(r.lines[0].syllables).toHaveLength(0);
+    expect(r.lines[0].keys).toHaveLength(0);
+    expect(r.lines[0].internalGroups.size).toBe(0);
     expect(r.pairs).toEqual([]);
     expect(r.groups).toEqual([]);
     expect(r.maxTailK).toBe(0);
@@ -68,6 +72,34 @@ describe('reverseAnalyze · grouping by last-syllable key', () => {
     const r = reverseAnalyze('你好\nhello\n他好', strictScheme);
     expect(r.groups).toHaveLength(1);
     expect(r.groups[0].lineIndices).toEqual([0, 2]); // skips the 'hello' line
+  });
+});
+
+describe('reverseAnalyze · internal rhyme detection', () => {
+  it('finds repeated rhyme keys inside a single line', () => {
+    // "哈哈哈哈哈" — all 5 syllables are final 'a'.
+    const r = reverseAnalyze('哈哈哈哈哈', strictScheme);
+    const line = r.lines[0];
+    expect(line.internalGroups.size).toBe(1);
+    const positions = line.internalGroups.get('a');
+    expect(positions).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('returns an empty map when no key repeats within a line', () => {
+    // "春暖花开" — 4 distinct finals (un, uan, ua, ai) under strict.
+    const r = reverseAnalyze('春暖花开', strictScheme);
+    const line = r.lines[0];
+    expect(line.internalGroups.size).toBe(0);
+  });
+
+  it('detects multiple independent internal-rhyme groups', () => {
+    // 2 a's + 2 i's in a single line (contrived). "哈西哈西" — but 西 is xi (i),
+    // so pattern a/i/a/i — both groups {0,2} a, {1,3} i.
+    const r = reverseAnalyze('哈西哈西', strictScheme);
+    const line = r.lines[0];
+    expect(line.internalGroups.size).toBe(2);
+    expect(line.internalGroups.get('a')).toEqual([0, 2]);
+    expect(line.internalGroups.get('i')).toEqual([1, 3]);
   });
 });
 

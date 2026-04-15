@@ -89,6 +89,31 @@ function buildGroups(lines: readonly LineAnalysis[]): RhymeGroup[] {
   return groups;
 }
 
+/**
+ * Group positions within a single line by their rhyme key. Empty keys
+ * and single-occurrence keys are dropped — only returns genuine
+ * "internal rhyme" groups (≥2 positions sharing a key).
+ */
+function computeInternalGroups(
+  keys: readonly string[]
+): Map<string, number[]> {
+  const all = new Map<string, number[]>();
+  for (let i = 0; i < keys.length; i++) {
+    if (!keys[i]) continue;
+    let bucket = all.get(keys[i]);
+    if (!bucket) {
+      bucket = [];
+      all.set(keys[i], bucket);
+    }
+    bucket.push(i);
+  }
+  // Drop singletons.
+  for (const [k, pos] of all) {
+    if (pos.length < 2) all.delete(k);
+  }
+  return all;
+}
+
 /** Run reverse analysis on a passage of (potentially multi-line) text. */
 export function reverseAnalyze(
   text: string,
@@ -98,7 +123,8 @@ export function reverseAnalyze(
   const lines: LineAnalysis[] = rawLines.map((lineText, index) => {
     const syllables = parseSyllables(lineText);
     const keys = syllables.map((s) => scheme.keyOf(s.final));
-    return { text: lineText, index, syllables, keys };
+    const internalGroups = computeInternalGroups(keys);
+    return { text: lineText, index, syllables, keys, internalGroups };
   });
 
   const pairs: RhymePair[] = [];
