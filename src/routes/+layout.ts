@@ -6,3 +6,11 @@
  * GitHub Pages, and faster first paint).
  */
 export const prerender = true;
+
+/**
+ * Always serve URLs with a trailing slash so GitHub Pages can resolve
+ * BOTH `/discover` and `/discover/` to `discover/index.html`. Without
+ * this, SvelteKit emits `discover.html` which only matches the
+ * no-slash form and 404s on the slash form.
+ */
+export const trailingSlash = 'always';
