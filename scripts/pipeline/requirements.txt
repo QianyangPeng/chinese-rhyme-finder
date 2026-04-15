@@ -1,0 +1,45 @@
+# Python build-pipeline dependencies.
+#
+# These are BUILD-TIME only. The generated static/data/lexicon.json is
+# what the browser loads — users never install any of this.
+#
+# Install with:
+#   python -m pip install -r scripts/pipeline/requirements.txt
+#
+# ---------------------------------------------------------------------------
+# Phonology (pinyin, syllable decomposition)
+# ---------------------------------------------------------------------------
+pypinyin>=0.52.0
+
+# ---------------------------------------------------------------------------
+# POS taggers (pluggable — see scripts/pipeline/taggers/)
+# ---------------------------------------------------------------------------
+# Default tagger: jieba (lightweight, ~20MB dict, pure Python, 87% accuracy).
+# Ships ready, zero model download, works offline.
+jieba>=0.42.1
+
+# Optional upgrade: HanLP (deep learning, 92-95% accuracy).
+# ~500MB TF/Torch + ~200MB POS model downloaded on first use.
+# Enable via:   python -m pipeline.build --tagger=hanlp
+# Uncomment to install:
+# hanlp>=2.1.0
+
+# ---------------------------------------------------------------------------
+# HTTP / file handling (for source adapters that download data)
+# ---------------------------------------------------------------------------
+requests>=2.32.0
+
+# ---------------------------------------------------------------------------
+# OpenCC — Traditional ↔ Simplified conversion (Tang poetry is 繁体)
+# ---------------------------------------------------------------------------
+opencc-python-reimplemented>=0.1.7
+
+# ---------------------------------------------------------------------------
+# Future language plugins (commented; uncomment when adding the language)
+# ---------------------------------------------------------------------------
+# spacy>=3.7.0              # English POS tagging
+# cmudict>=1.0.20           # English phonetic dict
+# g2p-en>=2.1.0             # English grapheme-to-phoneme
+# fugashi>=1.3.0            # Japanese MeCab binding
+# unidic-lite>=1.0.8        # Japanese dictionary
+# konlpy>=0.6.0             # Korean POS tagging

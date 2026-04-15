@@ -122,7 +122,48 @@ function mergeRecords(
 interface ExtendedDoc {
   version: number;
   count: number;
-  phrases: PhraseRecord[];
+  phrases: RawLexiconEntry[];
+}
+
+/** The on-disk JSON shape emitted by the Python pipeline. We normalize
+ *  it to PhraseRecord at load time (see `normalizeEntry`). v3+ uses
+ *  `rhymeKeys` and `syllables`; legacy v2 used `finals` and
+ *  `pinyinWithTone` — both are accepted. */
+interface RawLexiconEntry {
+  text: string;
+  language?: 'zh' | 'en' | 'ja' | 'ko';
+  length: number;
+  // v3 canonical names:
+  rhymeKeys?: string[];
+  syllables?: string[];
+  segments?: { text: string; pos: string }[];
+  // v2 legacy names (still accepted):
+  finals?: string[];
+  pinyinWithTone?: string[];
+  tones?: number[];
+  stress?: number[];
+  quality: number;
+  tags: string[];
+  source: string;
+}
+
+/** Map the on-disk JSON shape to PhraseRecord, handling both v2 and v3. */
+function normalizeEntry(raw: RawLexiconEntry): PhraseRecord {
+  const finals = raw.rhymeKeys ?? raw.finals ?? [];
+  const pinyinWithTone = raw.syllables ?? raw.pinyinWithTone;
+  return {
+    text: raw.text,
+    language: raw.language ?? 'zh',
+    length: raw.length,
+    finals,
+    tones: raw.tones,
+    stress: raw.stress,
+    pinyinWithTone,
+    segments: raw.segments,
+    quality: raw.quality,
+    tags: raw.tags,
+    source: raw.source
+  };
 }
 
 let _extendedLexicon: Lexicon | null = null;
@@ -146,7 +187,8 @@ export function ensureExtendedLexicon(baseUrl = ''): Promise<Lexicon> {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const doc = (await res.json()) as ExtendedDoc;
       if (!doc || !Array.isArray(doc.phrases)) throw new Error('malformed doc');
-      const merged = mergeRecords(seedLex.phrases, doc.phrases);
+      const normalized = doc.phrases.map(normalizeEntry);
+      const merged = mergeRecords(seedLex.phrases, normalized);
       _extendedLexicon = lexiconFromRecords(merged);
     } catch (err) {
       // Fall back to seed-only — app stays functional.
