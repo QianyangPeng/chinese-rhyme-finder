@@ -120,6 +120,11 @@ const TONE_MAP = {
 };
 const INITIAL_RE = /^(zh|ch|sh|b|p|m|f|d|t|n|l|g|k|h|j|q|x|r|z|c|s)/;
 
+// Initials after which a written "i" is really the apical vowel [ɨ].
+// We encode that case as the distinct final "-i" to keep it separate
+// from regular i after j/q/x. Must match the runtime decomposer.
+const APICAL_I_INITIALS = new Set(['zh', 'ch', 'sh', 'r', 'z', 'c', 's']);
+
 function stripTone(s) {
   let out = '';
   for (const ch of s) out += TONE_MAP[ch] ?? ch;
@@ -163,6 +168,8 @@ function extractFinal(rawPinyin) {
     if (rest === 'iu') rest = 'iou';
     else if (rest === 'ui') rest = 'uei';
     else if (rest === 'un') rest = 'uen';
+    // Apical-i mark: shi/zhi/ri/zi/ci/si rhyme in 支 not 齐.
+    else if (rest === 'i' && APICAL_I_INITIALS.has(init)) rest = '-i';
     return rest;
   }
   return s;
@@ -170,7 +177,7 @@ function extractFinal(rawPinyin) {
 
 // All canonical finals (keep in sync with decomposer.ts VALID_FINALS)
 const VALID_FINALS = new Set([
-  'a','o','e','i','u','ü','er',
+  'a','o','e','i','-i','u','ü','er',
   'ai','ei','ao','ou',
   'an','en','ang','eng','ong',
   'ia','ie','iao','iou','ian','in','iang','ing','iong',

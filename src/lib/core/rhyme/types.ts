@@ -8,16 +8,18 @@
  * declares equivalent).
  *
  * Different schemes have different granularity:
- *   - strict: each canonical final is its own group
- *   - shisanzhe (十三辙): 13 traditional opera/ballad groups
- *   - loose: 13辙 + common neighbor-rhyme bridges (en↔eng, in↔ing, etc.)
+ *   - xinyun  (中华新韵 14 部, DEFAULT): modern Mandarin standard,
+ *     separates apical -i (支) from regular i/ü (齐).
+ *   - shisanzhe (十三辙): traditional 曲艺 grouping, merges apical into 一七.
+ *   - strict: each canonical final is its own group.
+ *   - loose: 十三辙 + cross-辙 bridges (en↔eng, in↔ing, etc.) for looser rap.
  *
  * For multi-syllable matching, callers compute the rhyme-key sequence
  * for each phrase then compare sequences positionally.
  */
 
 /** Stable IDs for the rhyme schemes shipped in the box. */
-export type RhymeSchemeId = 'strict' | 'shisanzhe' | 'loose';
+export type RhymeSchemeId = 'strict' | 'shisanzhe' | 'loose' | 'xinyun';
 
 /**
  * A rhyme scheme is fully defined by:

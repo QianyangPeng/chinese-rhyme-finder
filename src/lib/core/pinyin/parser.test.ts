@@ -72,11 +72,11 @@ describe('parsePhrase · mixed Chinese / English / punctuation', () => {
     const syllables = tokens.filter((t) => t.kind === 'syllable');
     const others = tokens.filter((t) => t.kind === 'other');
     expect(syllables.length).toBe(2);
-    // 手 shou3, 势 shi4
+    // 手 shou3 → final ou; 势 shì → apical "-i" (not regular i).
     expect(syllables.every((t) => t.kind === 'syllable')).toBe(true);
     if (syllables[0].kind === 'syllable' && syllables[1].kind === 'syllable') {
       expect(syllables[0].syllable.final).toBe('ou');
-      expect(syllables[1].syllable.final).toBe('i');
+      expect(syllables[1].syllable.final).toBe('-i');
     }
     // English letters come through as 'other'
     expect(others.length).toBeGreaterThan(0);

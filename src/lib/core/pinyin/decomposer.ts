@@ -5,10 +5,14 @@
  *
  * Note on the apical -i in zi/ci/si and zhi/chi/shi/ri: the spelling "i"
  * after these initials denotes a different vowel ([ɨ]) than the high-front
- * "i" after j/q/x. We keep the canonical spelling "i" here for compatibility
- * with the rhyme schemes (the 十三辙 一七辙 group lumps both together);
- * downstream code that needs to distinguish can inspect the initial.
+ * "i" after j/q/x. We encode it as the distinct final "-i" so the rhyme
+ * schemes can separate 支 (apical) from 一七 (regular i, ü) — matching
+ * modern ear perception where 只 (shǐ) and 李 (lǐ) do NOT rhyme. See
+ * DECISIONS.md D-011 for the rationale.
  */
+
+/** Initials after which a written "i" is actually the apical vowel ([ɨ]). */
+const APICAL_I_INITIALS = new Set(['zh', 'ch', 'sh', 'r', 'z', 'c', 's']);
 
 /** Two-character initials must be tried before single-character ones. */
 const TWO_CHAR_INITIALS = ['zh', 'ch', 'sh'] as const;
@@ -70,7 +74,12 @@ const FINAL_DECOMPOSE: Record<string, readonly [string, string, string]> = {
   // ü-medial finals
   'üe':   ['ü', 'e', ''],
   'üan':  ['ü', 'a', 'n'],
-  'ün':   ['', 'ü', 'n']      // ü as nucleus, not medial
+  'ün':   ['', 'ü', 'n'],     // ü as nucleus, not medial
+
+  // Apical -i: phonetically the syllabic continuation of the initial, but
+  // we still mark medial/nucleus/coda as if it were regular i for
+  // downstream simplicity.
+  '-i':   ['', 'i', '']
 };
 
 /** Set of all valid final strings — useful for unit tests / sanity checks. */
@@ -122,9 +131,18 @@ export function decompose(canonical: string): Decomposed | null {
   if (canonical.length === 0) return null;
 
   const { initial, rest } = extractInitial(canonical);
-  const components = FINAL_DECOMPOSE[rest];
+
+  // Apical-i remap: "shi" / "zhi" / "ri" / "zi" / "ci" / "si" /… all
+  // surface as initial + "i", but the "i" here is the apical vowel,
+  // phonologically distinct from the i after j/q/x/l/m/b/p/…. Mark it.
+  let final = rest;
+  if (rest === 'i' && APICAL_I_INITIALS.has(initial)) {
+    final = '-i';
+  }
+
+  const components = FINAL_DECOMPOSE[final];
   if (!components) return null;
 
   const [medial, nucleus, coda] = components;
-  return { initial, final: rest, medial, nucleus, coda };
+  return { initial, final, medial, nucleus, coda };
 }

@@ -16,7 +16,7 @@
   // Defaults; URL-based overrides applied client-side in onMount so
   // prerender doesn't choke on searchParams access.
   let query = $state('降维打击');
-  let schemeId = $state<RhymeSchemeId>('shisanzhe');
+  let schemeId = $state<RhymeSchemeId>('xinyun');
   let mode = $state<SearchMode>('full');
   let urlReady = $state(false);
 
@@ -26,7 +26,7 @@
     const s = params.get('scheme');
     const m = params.get('mode');
     if (q) query = q;
-    if (s === 'strict' || s === 'shisanzhe' || s === 'loose') schemeId = s;
+    if (s === 'strict' || s === 'shisanzhe' || s === 'loose' || s === 'xinyun') schemeId = s;
     if (m === 'tail') mode = 'tail';
     urlReady = true;
 
@@ -42,7 +42,7 @@
     if (!urlReady || typeof window === 'undefined') return;
     const params = new URLSearchParams();
     if (query.trim()) params.set('q', query.trim());
-    if (schemeId !== 'shisanzhe') params.set('scheme', schemeId);
+    if (schemeId !== 'xinyun') params.set('scheme', schemeId);
     if (mode !== 'full') params.set('mode', mode);
     const qs = params.toString();
     const url = `${base}/search/${qs ? '?' + qs : ''}`;

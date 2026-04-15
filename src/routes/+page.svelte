@@ -1,6 +1,6 @@
 <script lang="ts">
   import { parseSyllables } from '$lib/core/pinyin';
-  import { ALL_SCHEMES, matchFull, shisanzheScheme } from '$lib/core/rhyme';
+  import { ALL_SCHEMES, matchFull, xinyunScheme } from '$lib/core/rhyme';
   import type { Syllable } from '$lib/core/pinyin';
   import { getCurrentLexicon, ensureExtendedLexicon } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
@@ -12,7 +12,7 @@
   // here because this is a headline stat, not a render list.
   let lexicon = $state(getCurrentLexicon());
   const clusterCount = $derived(
-    mineClusters(lexicon, shisanzheScheme, { maxClusters: Infinity }).clusters.length
+    mineClusters(lexicon, xinyunScheme, { maxClusters: Infinity }).clusters.length
   );
   const STATS = $derived({
     phrases: lexicon.phrases.length,

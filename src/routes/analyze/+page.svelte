@@ -10,7 +10,7 @@
 都是同龄人我本来没想降维打击`;
 
   let text = $state(DEFAULT_TEXT);
-  let schemeId = $state<RhymeSchemeId>('shisanzhe');
+  let schemeId = $state<RhymeSchemeId>('xinyun');
 
   const scheme = $derived(getScheme(schemeId));
   const analysis = $derived(reverseAnalyze(text, scheme));

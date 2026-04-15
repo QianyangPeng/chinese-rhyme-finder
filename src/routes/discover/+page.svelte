@@ -10,7 +10,7 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
 
-  let schemeId = $state<RhymeSchemeId>('shisanzhe');
+  let schemeId = $state<RhymeSchemeId>('xinyun');
   let minDepth = $state(2);
   let minMembers = $state(3);
   let tailOnly = $state(true);
@@ -26,7 +26,7 @@
     const d = Number.parseInt(params.get('depth') ?? '', 10);
     const m = Number.parseInt(params.get('members') ?? '', 10);
     const t = params.get('tail');
-    if (s === 'strict' || s === 'shisanzhe' || s === 'loose') schemeId = s;
+    if (s === 'strict' || s === 'shisanzhe' || s === 'loose' || s === 'xinyun') schemeId = s;
     if (Number.isFinite(d) && d >= 1) minDepth = d;
     if (Number.isFinite(m) && m >= 2) minMembers = m;
     if (t === 'all') tailOnly = false;
@@ -49,7 +49,7 @@
   $effect(() => {
     if (!urlReady || typeof window === 'undefined') return;
     const qp = new URLSearchParams();
-    if (schemeId !== 'shisanzhe') qp.set('scheme', schemeId);
+    if (schemeId !== 'xinyun') qp.set('scheme', schemeId);
     if (minDepth !== 2) qp.set('depth', String(minDepth));
     if (minMembers !== 3) qp.set('members', String(minMembers));
     if (!tailOnly) qp.set('tail', 'all');
@@ -236,8 +236,23 @@
           <ul class="flex flex-wrap gap-2">
             {#each cluster.members as m (m.phraseId)}
               {@const phrase = catalog.lexiconRef[m.phraseId]}
-              <li class="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1 text-sm">
-                {phrase.text}
+              {@const chars = [...phrase.text]}
+              {@const matchStart = phrase.length - cluster.patternLength - m.tailOffset}
+              {@const matchEnd = phrase.length - m.tailOffset}
+              <li class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-1.5">
+                <div class="flex items-center gap-[2px]">
+                  {#each chars as ch, i (i)}
+                    {@const inMatch = i >= matchStart && i < matchEnd}
+                    <span
+                      class="inline-flex min-w-[1.4em] justify-center rounded px-[3px] py-[1px] text-sm {inMatch
+                        ? 'bg-sky-100 font-semibold text-sky-900 dark:bg-sky-900/40 dark:text-sky-200'
+                        : 'text-zinc-500 dark:text-zinc-400'}"
+                      title={phrase.finals[i] ? `${ch} · ${phrase.finals[i]}` : ch}
+                    >
+                      {ch}
+                    </span>
+                  {/each}
+                </div>
               </li>
             {/each}
           </ul>

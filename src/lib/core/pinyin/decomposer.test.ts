@@ -54,14 +54,31 @@ describe('decompose · two-character initials (zh/ch/sh)', () => {
     });
   });
 
-  it('splits shi into sh + i (the i here is apical [ɨ] phonetically)', () => {
+  it('splits shi into sh + "-i" (apical — distinct final from regular i)', () => {
     expect(decompose('shi')).toEqual({
       initial: 'sh',
-      final: 'i',
+      final: '-i',
       medial: '',
       nucleus: 'i',
       coda: ''
     });
+  });
+
+  it('emits "-i" for every apical-i initial (zh/ch/sh/r/z/c/s)', () => {
+    for (const init of ['zh', 'ch', 'sh', 'r', 'z', 'c', 's']) {
+      const r = decompose(init + 'i');
+      expect(r, `${init}i should decompose`).not.toBeNull();
+      expect(r!.final, `${init}i final should be "-i"`).toBe('-i');
+      expect(r!.initial).toBe(init);
+    }
+  });
+
+  it('keeps regular "i" for j/q/x and other non-apical initials', () => {
+    for (const init of ['j', 'q', 'x', 'l', 'm', 'b', 'p', 'n', 'd', 't']) {
+      const r = decompose(init + 'i');
+      expect(r, `${init}i should decompose`).not.toBeNull();
+      expect(r!.final, `${init}i final should stay "i"`).toBe('i');
+    }
   });
 });
 
@@ -185,14 +202,17 @@ describe('decompose · invalid input', () => {
 });
 
 describe('decompose · canonical-finals coverage', () => {
-  it('exposes 35 standard finals', () => {
-    // 6 monophthongs + 4 diphthongs + 5 simple-nasal + 9 i-finals
-    // + 8 u-finals + 3 ü-finals + er = 36; we count what's actually defined.
-    expect(VALID_FINALS.size).toBe(36);
+  it('exposes 37 standard finals (36 + apical "-i")', () => {
+    // Base 36: 6 monophthongs + 4 diphthongs + 5 simple-nasal
+    //        + 9 i-finals + 8 u-finals + 3 ü-finals + er.
+    // Plus the distinct apical-i final = 37.
+    expect(VALID_FINALS.size).toBe(37);
   });
 
-  it('every listed final is decomposable when used as a null-initial syllable', () => {
+  it('every non-apical final is decomposable when used as a null-initial syllable', () => {
     for (const final of VALID_FINALS) {
+      // "-i" is apical-only (zh/ch/sh/r/z/c/s), never null-initial.
+      if (final === '-i') continue;
       const r = decompose(final);
       expect(r, `final '${final}' must decompose`).not.toBeNull();
       expect(r!.final).toBe(final);

@@ -10,12 +10,16 @@ export type {
 
 export {
   ALL_SCHEMES,
+  DEFAULT_SCHEME_ID,
   getScheme,
   strictScheme,
   shisanzheScheme,
   looseScheme,
+  xinyunScheme,
   SHISANZHE,
-  SHISANZHE_TABLE
+  SHISANZHE_TABLE,
+  XINYUN,
+  XINYUN_TABLE
 } from './schemes/index.js';
 
 export {

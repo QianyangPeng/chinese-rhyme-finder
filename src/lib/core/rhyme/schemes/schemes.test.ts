@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { strictScheme } from './strict.js';
 import { shisanzheScheme, SHISANZHE } from './shisanzhe.js';
 import { looseScheme } from './loose.js';
+import { xinyunScheme, XINYUN } from './xinyun.js';
 import { VALID_FINALS } from '../../pinyin/decomposer.js';
 
 describe('strictScheme', () => {
@@ -87,6 +88,73 @@ describe('shisanzheScheme · 13 traditional groups', () => {
     for (const final of VALID_FINALS) {
       const zhe = shisanzheScheme.keyOf(final);
       expect(zhe, `final '${final}' has no 辙 mapping`).not.toBe('');
+    }
+  });
+});
+
+describe('xinyunScheme · 中华新韵 14 部', () => {
+  it('separates 齐 (regular i, ü) from 支 (apical -i, er)', () => {
+    // This is the whole point of the scheme — 只 (shǐ, apical) and
+    // 李 (lǐ, regular) do NOT rhyme in modern Mandarin.
+    expect(xinyunScheme.keyOf('i')).toBe(XINYUN.QI);
+    expect(xinyunScheme.keyOf('ü')).toBe(XINYUN.QI);
+    expect(xinyunScheme.keyOf('-i')).toBe(XINYUN.ZHI);
+    expect(xinyunScheme.keyOf('er')).toBe(XINYUN.ZHI);
+    expect(xinyunScheme.keyOf('i')).not.toBe(xinyunScheme.keyOf('-i'));
+  });
+
+  it('groups -ng nasal families correctly', () => {
+    for (const f of ['ang', 'iang', 'uang']) {
+      expect(xinyunScheme.keyOf(f)).toBe(XINYUN.TANG);
+    }
+    for (const f of ['eng', 'ing', 'ong', 'iong', 'ueng']) {
+      expect(xinyunScheme.keyOf(f)).toBe(XINYUN.GENG);
+    }
+  });
+
+  it('groups -n nasal families correctly', () => {
+    for (const f of ['an', 'ian', 'uan', 'üan']) {
+      expect(xinyunScheme.keyOf(f)).toBe(XINYUN.HAN);
+    }
+    for (const f of ['en', 'in', 'uen', 'ün']) {
+      expect(xinyunScheme.keyOf(f)).toBe(XINYUN.WEN);
+    }
+  });
+
+  it('groups open-vowel families correctly', () => {
+    expect(xinyunScheme.keyOf('a')).toBe(XINYUN.MA);
+    expect(xinyunScheme.keyOf('ia')).toBe(XINYUN.MA);
+    expect(xinyunScheme.keyOf('ua')).toBe(XINYUN.MA);
+    expect(xinyunScheme.keyOf('o')).toBe(XINYUN.BO);
+    expect(xinyunScheme.keyOf('e')).toBe(XINYUN.BO);
+    expect(xinyunScheme.keyOf('uo')).toBe(XINYUN.BO);
+    expect(xinyunScheme.keyOf('ie')).toBe(XINYUN.JIE);
+    expect(xinyunScheme.keyOf('üe')).toBe(XINYUN.JIE);
+  });
+
+  it('groups diphthong families correctly', () => {
+    expect(xinyunScheme.keyOf('ai')).toBe(XINYUN.KAI);
+    expect(xinyunScheme.keyOf('uai')).toBe(XINYUN.KAI);
+    expect(xinyunScheme.keyOf('ei')).toBe(XINYUN.WEI);
+    expect(xinyunScheme.keyOf('uei')).toBe(XINYUN.WEI);
+    expect(xinyunScheme.keyOf('ao')).toBe(XINYUN.HAO);
+    expect(xinyunScheme.keyOf('iao')).toBe(XINYUN.HAO);
+    expect(xinyunScheme.keyOf('ou')).toBe(XINYUN.YOU);
+    expect(xinyunScheme.keyOf('iou')).toBe(XINYUN.YOU);
+  });
+
+  it('puts 姑苏-style u by itself', () => {
+    expect(xinyunScheme.keyOf('u')).toBe(XINYUN.GU);
+    // 齐 and 支 must not collide with 姑 (all are "single high vowel"
+    // but still perceptually distinct).
+    expect(xinyunScheme.keyOf('u')).not.toBe(xinyunScheme.keyOf('i'));
+    expect(xinyunScheme.keyOf('u')).not.toBe(xinyunScheme.keyOf('-i'));
+  });
+
+  it('covers every canonical final', () => {
+    for (const f of VALID_FINALS) {
+      const k = xinyunScheme.keyOf(f);
+      expect(k, `final '${f}' has no 新韵 mapping`).not.toBe('');
     }
   });
 });
