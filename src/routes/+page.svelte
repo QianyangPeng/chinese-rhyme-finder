@@ -2,6 +2,7 @@
   import { parseSyllables } from '$lib/core/pinyin';
   import { ALL_SCHEMES, matchFull } from '$lib/core/rhyme';
   import type { Syllable } from '$lib/core/pinyin';
+  import { base } from '$app/paths';
 
   // Two phrases to analyze. Defaults are the canonical Capper example
   // ("姜维的戏" vs "降维打击") that motivated the whole project — they show
@@ -228,19 +229,27 @@
 
   <!-- Modes overview (kept short) -->
   <section class="mb-10">
-    <h2 class="mb-3 text-xl font-semibold text-zinc-900">三种模式（开发中）</h2>
+    <h2 class="mb-3 text-xl font-semibold text-zinc-900">三种模式</h2>
     <ul class="space-y-2 text-sm text-zinc-700">
       <li>
         <span class="font-semibold">🔥 Discover</span>
-        <span class="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">P0</span>
+        <span class="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">P0 · 开发中</span>
         — 系统主动展示算法挖掘的押韵 cluster，按巧妙度排序
       </li>
       <li>
-        <span class="font-semibold">🔍 Search</span> — 输入词组，分级宽松（严式 →
-        邻韵）查找押韵候选
+        <span class="font-semibold">🔍 Search</span>
+        <span class="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">P1 · 开发中</span>
+        — 输入词组，分级宽松（严式 → 邻韵）查找押韵候选
       </li>
       <li>
-        <span class="font-semibold">📖 Analyze</span> — 粘贴歌词，反向分析押韵模式
+        <a
+          href="{base}/analyze"
+          class="font-semibold text-zinc-900 underline hover:text-zinc-700"
+        >
+          📖 Analyze →
+        </a>
+        <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-700">就绪</span>
+        — 粘贴歌词，反向分析押韵模式（多行间的 K 押深度 + 同韵分组）
       </li>
     </ul>
   </section>

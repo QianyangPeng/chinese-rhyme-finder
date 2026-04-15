@@ -69,10 +69,13 @@
 - [ ] `src/routes/search/+page.svelte` — 输入框 + 分级宽松结果展示
 - [ ] 多音字交互式选择（气泡）
 
-### P1.9 Analyze UI（依赖 P1.2）
+### P1.9 Analyze UI（依赖 P1.2）✅
 
-- [ ] `src/routes/analyze/+page.svelte` — 粘贴歌词 → 高亮押韵
-- [ ] 反向分析算法（滑窗 + 聚类找押韵分组）
+- [x] `src/lib/core/analyze/reverse.ts` — 反向分析算法（pair tail/head K + 同韵分组）
+- [x] `src/routes/analyze/+page.svelte` — 粘贴歌词 → 色块高亮 + 行对行 K 押矩阵
+- [x] 12 单元测试，含 Capper 三行段落金标准
+- [ ] 内部押韵检测（同一行内的押韵）— 推迟到 Phase 2
+- [ ] 跨位置错位押韵（A 句末 vs B 句中）— 推迟到 Phase 2
 
 ## Phase 2 · 体验打磨
 
