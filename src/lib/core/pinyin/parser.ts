@@ -12,6 +12,12 @@ import { pinyin } from 'pinyin-pro';
 import type { OtherCategory, ParseToken, Syllable } from './types.js';
 import { normalizePinyin } from './normalizer.js';
 import { decompose } from './decomposer.js';
+import { lookupEnglishWord, englishSyllableToSyllable } from './english.js';
+
+/** Characters that make up English words (letters + optional hyphen and apostrophe). */
+function isEnglishWordChar(ch: string): boolean {
+  return /^[A-Za-z'-]$/.test(ch);
+}
 
 /** True if `ch` falls in the basic CJK Unified Ideographs block. */
 function isChineseChar(ch: string): boolean {
@@ -118,8 +124,34 @@ export function parsePhrase(text: string): ParseToken[] {
         tokens.push({ kind: 'other', char: chars[i + k], category: 'other' });
       }
       i = j;
+    } else if (isEnglishWordChar(chars[i])) {
+      // Collect a run of English word characters (letters, '-', apostrophe).
+      let j = i;
+      while (j < chars.length && isEnglishWordChar(chars[j])) j++;
+      const run = chars.slice(i, j).join('');
+      const englishSyllables = lookupEnglishWord(run);
+      if (englishSyllables && englishSyllables.length > 0) {
+        // Known rap-vocabulary word → emit syllable tokens for each part.
+        for (const es of englishSyllables) {
+          tokens.push({
+            kind: 'syllable',
+            syllable: englishSyllableToSyllable(es)
+          });
+        }
+      } else {
+        // Unknown word — fall back to per-character "other" tokens so we
+        // don't lose the text, and so callers see it's English.
+        for (let k = i; k < j; k++) {
+          tokens.push({
+            kind: 'other',
+            char: chars[k],
+            category: classifyOther(chars[k])
+          });
+        }
+      }
+      i = j;
     } else {
-      // Single non-Chinese character.
+      // Single non-Chinese, non-letter character (punct / digit / ws).
       tokens.push({
         kind: 'other',
         char: chars[i],

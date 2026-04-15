@@ -67,23 +67,31 @@ describe('parseSyllables · multi-char words & 多音字 in context', () => {
 });
 
 describe('parsePhrase · mixed Chinese / English / punctuation', () => {
-  it('separates Chinese syllables from English letters', () => {
+  it('"hip-hop 手势" emits 4 syllables — known English word + 2 Chinese chars', () => {
+    // hip-hop is in the English rap-vocabulary table and expands to two
+    // syllables (hip, hop); 手 shou3 → ou; 势 shì → apical "-i".
     const tokens = parsePhrase('hip-hop 手势');
-    const syllables = tokens.filter((t) => t.kind === 'syllable');
+    const syllables = tokens
+      .filter((t) => t.kind === 'syllable')
+      .map((t) => (t.kind === 'syllable' ? t.syllable : null))
+      .filter((s): s is NonNullable<typeof s> => s !== null);
+    expect(syllables.length).toBe(4);
+    expect(syllables.map((s) => s.final)).toEqual(['i', 'a', 'ou', '-i']);
+    // English-derived syllables carry their display text in .char.
+    expect(syllables[0].char).toBe('hip');
+    expect(syllables[1].char).toBe('hop');
+  });
+
+  it('unknown English words still fall through as per-char other tokens', () => {
+    const tokens = parsePhrase('asdfghjkl 手');
     const others = tokens.filter((t) => t.kind === 'other');
-    expect(syllables.length).toBe(2);
-    // 手 shou3 → final ou; 势 shì → apical "-i" (not regular i).
-    expect(syllables.every((t) => t.kind === 'syllable')).toBe(true);
-    if (syllables[0].kind === 'syllable' && syllables[1].kind === 'syllable') {
-      expect(syllables[0].syllable.final).toBe('ou');
-      expect(syllables[1].syllable.final).toBe('-i');
-    }
-    // English letters come through as 'other'
-    expect(others.length).toBeGreaterThan(0);
     const englishChars = others.filter(
       (t) => t.kind === 'other' && t.category === 'english'
     );
-    expect(englishChars.length).toBe(6); // 'h','i','p','h','o','p'
+    // "asdfghjkl" → 9 english chars since it's not in the dictionary.
+    expect(englishChars.length).toBe(9);
+    const syllables = tokens.filter((t) => t.kind === 'syllable');
+    expect(syllables.length).toBe(1); // just 手
   });
 
   it('classifies digits, whitespace, and punctuation', () => {
