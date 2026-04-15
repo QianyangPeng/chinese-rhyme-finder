@@ -67,8 +67,11 @@
 
 - **运行时**：TypeScript + SvelteKit + Vite + Tailwind CSS，编译为纯静态站部署到 GitHub Pages
 - **拼音引擎**：基于 pinyin-pro，覆盖 36 个普通话韵母 + 13 辙映射 + 邻韵桥接
-- **数据层**：Phase 1 为 ~800 词条的手工 curated 种子库（`src/lib/core/corpus/seeds/`）。
-  Phase 1.4 会由 Python 管道（`scripts/`）扩充到 50k+
+- **数据层**：**30,695 词条**，由两部分组成：
+  - ~800 条手工 curated 种子库（`src/lib/core/corpus/seeds/`），带 scifi/lyric/modern/cultural 等风格标签
+  - 30k 条成语来自 [pwxcoo/chinese-xinhua](https://github.com/pwxcoo/chinese-xinhua)（MIT）
+  - 构建脚本：`node scripts/build_lexicon.mjs` 下载 + 清洗 + 算韵母 + 评分，输出 `static/data/lexicon.json`
+  - 运行时异步 fetch，失败自动降级到种子库，保证可用性
 - **测试**：vitest，~130 单元测试覆盖所有核心逻辑
 
 ## 项目结构
@@ -115,7 +118,24 @@ npm run test:watch   # 监听模式
 npm run check        # svelte-check 类型检查
 ```
 
-### Python 管道（可选，用于扩词库）
+### 重建词库
+
+主词库（xinhua 成语）由 Node 脚本构建：
+
+```bash
+# 自动下载数据源（首次用）或使用缓存
+node scripts/build_lexicon.mjs
+
+# 用本地 JSON 代替：
+node scripts/build_lexicon.mjs --xinhua=/path/to/idiom.json
+
+# 试跑小样：
+node scripts/build_lexicon.mjs --max=1000
+```
+
+输出：`static/data/lexicon.json`（~3.9 MB）。
+
+Python 管道（实验性，未接入运行时）：
 
 ```bash
 cd scripts
@@ -126,16 +146,21 @@ python -m pipeline.build    # 目前只有 seed_export 一个源
 
 详见 [scripts/README.md](scripts/README.md)。
 
+## 数据源致谢
+
+- 30k 成语来自 [pwxcoo/chinese-xinhua](https://github.com/pwxcoo/chinese-xinhua)（MIT）
+- 额外 800 条手工 curated 种子（见 `src/lib/core/corpus/seeds/`）
+
 ---
 
 ## 路线图
 
 Phase 0 ✅：项目骨架 + 部署
-Phase 1 ✅：核心引擎 + 四个模式 + 800 词种子库（**当前**）
-Phase 1.4 🚧：Python 管道接入真实语料，词库扩到 50k+
-Phase 2 📅：Discover 四个透镜（精选今日/未被发现的宝藏/多押排行榜/主题押韵集）、分享卡片图、多音字气泡、内部押韵检测
+Phase 1 ✅：核心引擎 + 四个模式 + 800 词种子库
+Phase 1.4 ✅：接入 xinhua 成语库，词库到 30k+（**当前**）
+Phase 2 🚧：Discover 四个透镜（精选今日/未被发现的宝藏/多押排行榜/主题押韵集）、分享卡片图、多音字气泡、内部押韵检测（已完成基础版）
 Phase 3 📅：可选 LLM sidecar（赏析解读 + 查询理解；永远不参与押韵生成）
-Phase 4 📅：古典韵书（平水韵 / 词林正韵 / 平仄）、中英混押、自定义韵表
+Phase 4 📅：古典韵书（平水韵 / 词林正韵 / 平仄）、中英混押、自定义韵表、词库接更多源（歌词 / 网络流行语 / 人名地名）
 
 完整清单：[docs/ROADMAP.md](docs/ROADMAP.md)
 
