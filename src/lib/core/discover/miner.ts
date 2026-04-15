@@ -37,6 +37,57 @@ const DEFAULT_OPTS = {
   tailOnly: true
 } as const;
 
+/**
+ * Two-level cache: Lexicon → scheme-key → pre-built bucket map. Uses
+ * WeakMap against the Lexicon reference so different lexicons don't
+ * pollute each other and the cache releases when a lexicon goes out
+ * of scope (e.g., when the extended corpus replaces the seed).
+ */
+const BUCKET_CACHE = new WeakMap<
+  Lexicon,
+  Map<string, Map<string, Map<number, ClusterMember>>>
+>();
+
+/**
+ * The expensive part: scan every phrase × K × start-position once,
+ * produce the bucket map. Result is independent of minMembers /
+ * minPatternLength / maxClusters so those can filter cheaply after.
+ */
+function buildBuckets(
+  lexicon: Lexicon,
+  scheme: RhymeScheme,
+  opts: { tailOnly: boolean; maxPatternLength: number }
+): Map<string, Map<number, ClusterMember>> {
+  const buckets = new Map<string, Map<number, ClusterMember>>();
+  const MIN_K = 2; // buckets start at depth 2; below that every phrase is a group
+
+  for (let phraseId = 0; phraseId < lexicon.phrases.length; phraseId++) {
+    const p = lexicon.phrases[phraseId];
+    const keys = p.finals.map((f) => scheme.keyOf(f));
+    if (keys.some((k) => !k)) continue;
+
+    const maxK = Math.min(opts.maxPatternLength, p.length);
+    for (let K = MIN_K; K <= maxK; K++) {
+      const startPositions = opts.tailOnly ? [p.length - K] : [];
+      if (!opts.tailOnly) {
+        for (let s = 0; s <= p.length - K; s++) startPositions.push(s);
+      }
+      for (const start of startPositions) {
+        const sub = keys.slice(start, start + K);
+        if (sub.some((k) => !k)) continue;
+        const patternKey = sub.join('|') + '#' + K;
+        let bucket = buckets.get(patternKey);
+        if (!bucket) {
+          bucket = new Map();
+          buckets.set(patternKey, bucket);
+        }
+        bucket.set(phraseId, { phraseId, tailOffset: p.length - (start + K) });
+      }
+    }
+  }
+  return buckets;
+}
+
 /** Score a cluster's "cleverness". See DECISIONS.md D-006 for the
  *  rationale. Phase 1 implementation; refined later as data grows. */
 function scoreCluster(
@@ -66,6 +117,10 @@ function scoreCluster(
 
 /**
  * Mine clusters. Returns a catalog sorted by cleverness desc.
+ *
+ * Internally memoizes the expensive bucket-building pass by
+ * (lexicon identity, scheme.id, tailOnly) so flipping min-depth /
+ * min-members / max-clusters in the UI is cheap.
  */
 export function mineClusters(
   lexicon: Lexicon,
@@ -73,39 +128,22 @@ export function mineClusters(
   options: MineOptions = {}
 ): ClusterCatalog {
   const opts = { ...DEFAULT_OPTS, ...options };
-  const buckets = new Map<string, Map<number, ClusterMember>>();
-
-  for (let phraseId = 0; phraseId < lexicon.phrases.length; phraseId++) {
-    const p = lexicon.phrases[phraseId];
-    const keys = p.finals.map((f) => scheme.keyOf(f));
-    if (keys.some((k) => !k)) continue; // skip phrases with unknown finals
-
-    const maxK = Math.min(opts.maxPatternLength, p.length);
-    for (let K = opts.minPatternLength; K <= maxK; K++) {
-      const startPositions = opts.tailOnly ? [p.length - K] : [];
-      if (!opts.tailOnly) {
-        for (let s = 0; s <= p.length - K; s++) startPositions.push(s);
-      }
-
-      for (const start of startPositions) {
-        const sub = keys.slice(start, start + K);
-        if (sub.some((k) => !k)) continue;
-        const patternKey = sub.join('|') + '#' + K;
-
-        let bucket = buckets.get(patternKey);
-        if (!bucket) {
-          bucket = new Map();
-          buckets.set(patternKey, bucket);
-        }
-        // De-dup per phrase: a phrase can only appear once per cluster
-        // (use the LAST tail offset we found for it).
-        bucket.set(phraseId, { phraseId, tailOffset: p.length - (start + K) });
-      }
-    }
+  const cacheKey = opts.tailOnly ? `${scheme.id}:tail` : `${scheme.id}:all`;
+  let lexCache = BUCKET_CACHE.get(lexicon);
+  if (!lexCache) {
+    lexCache = new Map();
+    BUCKET_CACHE.set(lexicon, lexCache);
+  }
+  let buckets = lexCache.get(cacheKey);
+  if (!buckets) {
+    buckets = buildBuckets(lexicon, scheme, opts);
+    lexCache.set(cacheKey, buckets);
   }
 
   const clusters: RhymeCluster[] = [];
   for (const [patternKey, members] of buckets) {
+    // The bucket-level cache spans ALL K and membership counts; this
+    // consumer filters on minPatternLength / minMembers per-call.
     if (members.size < opts.minMembers) continue;
 
     const memberList = Array.from(members.values()).sort(
@@ -116,6 +154,9 @@ export function mineClusters(
     const hashPos = patternKey.lastIndexOf('#');
     const patternStr = patternKey.slice(0, hashPos);
     const patternLength = parseInt(patternKey.slice(hashPos + 1), 10);
+    // Client-side filter on pattern length (cached bucket may contain
+    // shorter patterns the user doesn't currently want to see).
+    if (patternLength < opts.minPatternLength) continue;
     const pattern = patternStr.split('|');
 
     // Distinct tags across members.

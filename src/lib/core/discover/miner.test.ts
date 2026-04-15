@@ -48,23 +48,32 @@ describe('mineClusters · synthetic lexicon', () => {
   });
 
   it('can scan all positions when tailOnly is false', () => {
-    // 春暖花开 (春/暖/花/开) — at start it's chun/nuan/hua/kai
-    // 床前明月 (chuang/qian/ming/yue) — different start
-    // For a head-position cluster to appear we need synthetic data.
+    // Three phrases that share their FIRST two syllables' rhyme
+    // pattern (in 十三辙): 中东·一七.
+    //   风行草偃 (feng/xing/cao/yan) → 中东/中东/遥条/言前
+    //   风行一时 (feng/xing/yi/shi)  → 中东/中东/一七/一七
+    //   鼎鼎有名 (ding/ding/you/ming)→ 中东/中东/由求/中东
+    // Head pattern 中东·中东 should form a cluster only when
+    // tailOnly=false is set.
     const seeds: SeedPhrase[] = [
-      { text: '春暖花开', tags: ['idiom'] },
-      { text: '春风又绿', tags: ['classical'] },
-      { text: '春光明媚', tags: ['idiom'] }
+      { text: '风行草偃', tags: ['idiom'] },
+      { text: '风行一时', tags: ['idiom'] },
+      { text: '鼎鼎有名', tags: ['idiom'] }
     ];
     const lex = buildLexicon(seeds);
     const cat = mineClusters(lex, shisanzheScheme, {
       tailOnly: false,
       minMembers: 3,
-      minPatternLength: 1
+      minPatternLength: 2
     });
-    // All three start with 春 (chun → 人辰辙) — a head cluster of size 3 should appear.
+    // A head cluster starting at position 0 with pattern 中东·中东
+    // should appear when full-position scanning is enabled.
     const headCluster = cat.clusters.find(
-      (c) => c.pattern[0] === '人辰辙' && c.members.length === 3
+      (c) =>
+        c.pattern.length === 2 &&
+        c.pattern[0] === '中东辙' &&
+        c.pattern[1] === '中东辙' &&
+        c.members.length === 3
     );
     expect(headCluster).toBeDefined();
   });
