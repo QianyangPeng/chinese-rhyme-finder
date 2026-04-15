@@ -39,6 +39,8 @@ export function buildLexicon(seeds: readonly SeedPhrase[] = SEED_PHRASES): Lexic
       text: trimmed,
       length: syllables.length,
       finals,
+      tones: syllables.map((s) => s.tone),
+      pinyinWithTone: syllables.map((s) => s.pinyinWithTone),
       quality: DEFAULT_QUALITY,
       tags: seed.tags,
       source: DEFAULT_SOURCE

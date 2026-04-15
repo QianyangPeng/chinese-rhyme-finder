@@ -13,28 +13,30 @@ export { SHISANZHE, SHISANZHE_TABLE } from './shisanzhe.js';
 export { XINYUN, XINYUN_TABLE } from './xinyun.js';
 
 /**
- * Shipped schemes, listed from strictest to loosest — that's how the
- * Search / Discover / Analyze UIs lay them out and how most users think
- * about rhyme precision.
+ * User-facing schemes — kept deliberately small. After user feedback
+ * that the "looser" schemes (中华新韵 / 十三辙 / 宽松邻韵) often
+ * surfaced candidates that don't actually sound like rhymes, the UI
+ * ships **only 严式**. Tonal strictness is layered via `ToneMode`
+ * (see tone.ts) so users pick 韵母-only vs 韵母+声调 via a separate
+ * toggle instead of scheme selection.
  *
- * 严式 is first because it's the reference standard (韵母 must match
- * character-for-character; it already distinguishes apical 只/zhi from
- * regular 李/li because they decompose to different final strings).
- *
- * 中华新韵 is the DEFAULT because it's the modern Mandarin authority
- * and matches ear perception for the vast majority of rap use cases.
- * 十三辙 is the曲艺 tradition (unifies 一七 + 支). 宽松 adds cross-辙
- * bridges on top of 十三辙 for aggressive rap.
+ * The three removed schemes stay exported for URL backward compat —
+ * anyone with an older shareable link under ?scheme=xinyun etc.
+ * still resolves, but the ScreenSchemeSelector only lists 严式.
  */
-export const ALL_SCHEMES: ReadonlyArray<RhymeScheme> = [
+export const ALL_SCHEMES: ReadonlyArray<RhymeScheme> = [strictScheme];
+
+/** Every known scheme, including the ones hidden from the UI. Used by
+ *  backward-compat URL parsers and rare power-user queries. */
+export const ALL_KNOWN_SCHEMES: ReadonlyArray<RhymeScheme> = [
   strictScheme,
   xinyunScheme,
   shisanzheScheme,
   looseScheme
 ];
 
-/** The default scheme for new queries — modern Mandarin ear perception. */
-export const DEFAULT_SCHEME_ID: RhymeSchemeId = 'xinyun';
+/** The default scheme — strict 韵母 matching. */
+export const DEFAULT_SCHEME_ID: RhymeSchemeId = 'strict';
 
 const BY_ID: Readonly<Record<RhymeSchemeId, RhymeScheme>> = {
   strict: strictScheme,

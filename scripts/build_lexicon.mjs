@@ -195,6 +195,23 @@ function stripTone(s) {
   return out;
 }
 
+/** Return tone number 0..4 for a tone-marked pinyin syllable. 0 if unmarked. */
+function toneOf(pinyinWithTone) {
+  for (const ch of pinyinWithTone) {
+    if (ACCENTED_TONE[ch] !== undefined) return ACCENTED_TONE[ch];
+  }
+  return 0;
+}
+
+const ACCENTED_TONE = {
+  ā: 1, á: 2, ǎ: 3, à: 4,
+  ē: 1, é: 2, ě: 3, è: 4,
+  ī: 1, í: 2, ǐ: 3, ì: 4,
+  ō: 1, ó: 2, ǒ: 3, ò: 4,
+  ū: 1, ú: 2, ǔ: 3, ù: 4,
+  ǖ: 1, ǘ: 2, ǚ: 3, ǜ: 4
+};
+
 /**
  * Canonicalize a pinyin syllable and strip the initial to produce the
  * final (韵母) — matches the runtime pipeline's behavior for the 36
@@ -339,12 +356,15 @@ function processXinhuaEntry(entry) {
   });
   const finals = py.map(extractFinal);
   if (finals.some((f) => !f || !VALID_FINALS.has(f))) return null;
+  const tones = py.map(toneOf);
 
   const quality = scoreIdiom(entry);
 
   return {
     text,
     finals,
+    tones,
+    pinyinWithTone: py,
     length: finals.length,
     quality: Math.round(quality * 10000) / 10000,
     tags: ['idiom', 'xinhua'],
@@ -406,6 +426,7 @@ function processXiehouyuEntry(entry) {
     });
     const finals = py.map(extractFinal);
     if (finals.some((f) => !f || !VALID_FINALS.has(f))) continue;
+    const tones = py.map(toneOf);
 
     const quality = scoreXiehouyuAnswer(text);
     if (quality < 0.5) continue;
@@ -413,6 +434,8 @@ function processXiehouyuEntry(entry) {
     out.push({
       text,
       finals,
+      tones,
+      pinyinWithTone: py,
       length: finals.length,
       quality: Math.round(quality * 10000) / 10000,
       tags: ['xiehouyu', 'colloquial'],
@@ -474,6 +497,7 @@ function processPoemFragments(rawPoems, era, needsSimplification) {
         });
         const finals = py.map(extractFinal);
         if (finals.some((f) => !f || !VALID_FINALS.has(f))) continue;
+        const tones = py.map(toneOf);
 
         const quality = scorePoemFragment(text, true, era);
         if (quality < 0.5) continue;
@@ -481,6 +505,8 @@ function processPoemFragments(rawPoems, era, needsSimplification) {
         out.push({
           text,
           finals,
+          tones,
+          pinyinWithTone: py,
           length: finals.length,
           quality: Math.round(quality * 10000) / 10000,
           tags: ['classical', 'poem', era],
@@ -534,6 +560,7 @@ function processSlangEntry(rawTitle) {
   // slang may contain English letters mixed in — skip if any syllable
   // has no valid final.
   if (finals.some((f) => !f || !VALID_FINALS.has(f))) return null;
+  const tones = py.map(toneOf);
 
   const quality = scoreSlangEntry(text);
   if (quality < 0.55) return null;
@@ -541,6 +568,8 @@ function processSlangEntry(rawTitle) {
   return {
     text,
     finals,
+    tones,
+    pinyinWithTone: py,
     length: finals.length,
     quality: Math.round(quality * 10000) / 10000,
     tags: ['modern', 'slang', 'wiktionary'],

@@ -10,7 +10,8 @@
 
 import type { Lexicon, PhraseRecord } from './types.js';
 import type { RhymeScheme } from '../rhyme/types.js';
-import { matchFull, matchTail, type RhymeMatch } from '../rhyme/matcher.js';
+import { matchFullKeys, matchTailKeys, type RhymeMatch } from '../rhyme/matcher.js';
+import { composeKey, type ToneMode } from '../rhyme/tone.js';
 
 export interface SearchHit {
   /** The matched phrase. */
@@ -45,6 +46,18 @@ export interface SearchOptions {
   readonly maxLevel?: number;
   /** Skip the input phrase itself when it appears in the lexicon. Default true. */
   readonly excludeText?: string;
+  /** Per-syllable tones for the target. Required only when toneMode ≠ 'none'. */
+  readonly targetTones?: readonly number[];
+  /** If set to 'exact' / 'pingze', search composes scheme keys that also
+   *  encode the tone; a candidate must match tone in addition to韵母
+   *  to count as rhyming at that position. Default 'none'. */
+  readonly toneMode?: ToneMode;
+  /** When true, only return candidates whose LAST syllable matches the
+   *  target's last syllable (under the active scheme + toneMode). The
+   *  relaxation count then counts how many NON-tail positions are off.
+   *  Default **true** — matches the user expectation that an end rhyme
+   *  is required for something to be called rhyme at all. */
+  readonly requireTailMatch?: boolean;
 }
 
 const DEFAULT_MAX_PER_BUCKET = 50;
@@ -64,6 +77,14 @@ export function searchByFinals(
   const maxLevel = options.maxLevel ?? targetLength;
   const maxPerBucket = options.maxPerBucket ?? DEFAULT_MAX_PER_BUCKET;
   const excludeText = options.excludeText;
+  const toneMode: ToneMode = options.toneMode ?? 'none';
+  const targetTones = options.targetTones;
+  const requireTailMatch = options.requireTailMatch ?? true;
+
+  // Pre-compose target keys with tone info if requested.
+  const targetKeys = target.map((f, i) =>
+    composeKey(f, targetTones?.[i] ?? 0, scheme, toneMode)
+  );
 
   // We only consider phrases of the same length under FULL mode.
   const candidateIds = lexicon.byLength.get(targetLength) ?? [];
@@ -77,9 +98,19 @@ export function searchByFinals(
     const phrase = lexicon.phrases[id];
     if (excludeText !== undefined && phrase.text === excludeText) continue;
 
-    const match = matchFull(target, phrase.finals, scheme);
+    const candKeys = phrase.finals.map((f, i) =>
+      composeKey(f, phrase.tones?.[i] ?? 0, scheme, toneMode)
+    );
+    const match = matchFullKeys(targetKeys, candKeys);
     if (!match) continue;
     if (match.relaxationLevel > maxLevel) continue;
+    // If the user wants the end to rhyme (default), drop candidates
+    // whose last position didn't match. A relaxation of Level 1
+    // "where position 3 is the off one" is what the user complained about.
+    if (requireTailMatch && targetLength > 0) {
+      const last = match.perPosition.length - 1;
+      if (last >= 0 && !match.perPosition[last]) continue;
+    }
 
     buckets[match.relaxationLevel].push({
       phrase,
@@ -144,6 +175,10 @@ export interface TailSearchOptions {
   /** Cap hits per bucket. Default 30. */
   readonly maxPerBucket?: number;
   readonly excludeText?: string;
+  /** Per-syllable tones for the target — enables tone-aware matching. */
+  readonly targetTones?: readonly number[];
+  /** Tone strictness: 'none' (default), 'pingze', or 'exact'. */
+  readonly toneMode?: ToneMode;
 }
 
 const TAIL_DEFAULT_MIN_K = 2;
@@ -168,11 +203,17 @@ export function searchByTail(
   const minTailK = options.minTailK ?? TAIL_DEFAULT_MIN_K;
   const maxPerBucket = options.maxPerBucket ?? TAIL_DEFAULT_MAX_PER_BUCKET;
   const excludeText = options.excludeText;
+  const toneMode: ToneMode = options.toneMode ?? 'none';
+  const targetTones = options.targetTones;
   const targetLength = target.length;
 
   if (targetLength === 0) {
     return { targetLength: 0, buckets: [], totalHits: 0 };
   }
+
+  const targetKeys = target.map((f, i) =>
+    composeKey(f, targetTones?.[i] ?? 0, scheme, toneMode)
+  );
 
   // Work out the longest possible tail K for this target under the scheme.
   // We cap the bucket keyspace at the target length.
@@ -183,14 +224,15 @@ export function searchByTail(
 
   for (const phrase of lexicon.phrases) {
     if (excludeText !== undefined && phrase.text === excludeText) continue;
+    const candKeys = phrase.finals.map((f, i) =>
+      composeKey(f, phrase.tones?.[i] ?? 0, scheme, toneMode)
+    );
     // Try the deepest possible match first; if it fully matches we stop.
-    // Otherwise we record the match at its actual relaxationLevel=0 window.
     const window = Math.min(targetLength, phrase.length);
     let bestK = 0;
     let bestMatch: RhymeMatch | null = null;
-    // Start wide and shrink so the first success is the deepest.
     for (let k = window; k >= minTailK; k--) {
-      const m = matchTail(target, phrase.finals, scheme, k);
+      const m = matchTailKeys(targetKeys, candKeys, k);
       if (m.isFullMatch && m.comparedLength === k) {
         bestK = k;
         bestMatch = m;

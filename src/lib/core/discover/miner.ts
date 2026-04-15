@@ -10,6 +10,7 @@
 
 import type { RhymeScheme } from '../rhyme/types.js';
 import type { Lexicon } from '../corpus/types.js';
+import { composeKey, type ToneMode } from '../rhyme/tone.js';
 import type { ClusterCatalog, ClusterMember, RhymeCluster } from './types.js';
 
 export interface MineOptions {
@@ -27,6 +28,9 @@ export interface MineOptions {
    * true — tail rhymes dominate practical use.
    */
   readonly tailOnly?: boolean;
+  /** Tone strictness: 'none' = 韵母 only (default); 'pingze' = 韵母+平仄;
+   *  'exact' = 韵母+具体声调. */
+  readonly toneMode?: ToneMode;
 }
 
 const DEFAULT_OPTS = {
@@ -60,14 +64,17 @@ const BUCKET_CACHE = new WeakMap<
 function buildBuckets(
   lexicon: Lexicon,
   scheme: RhymeScheme,
-  opts: { tailOnly: boolean; maxPatternLength: number }
+  opts: { tailOnly: boolean; maxPatternLength: number; toneMode: ToneMode }
 ): Map<string, Map<number, ClusterMember>> {
   const buckets = new Map<string, Map<number, ClusterMember>>();
   const MIN_K = 2; // buckets start at depth 2; below that every phrase is a group
 
   for (let phraseId = 0; phraseId < lexicon.phrases.length; phraseId++) {
     const p = lexicon.phrases[phraseId];
-    const keys = p.finals.map((f) => scheme.keyOf(f));
+    // Compose keys with tone info if the user requested tone-aware mining.
+    const keys = p.finals.map((f, i) =>
+      composeKey(f, p.tones?.[i] ?? 0, scheme, opts.toneMode)
+    );
     if (keys.some((k) => !k)) continue;
 
     const maxK = Math.min(opts.maxPatternLength, p.length);
@@ -131,8 +138,9 @@ export function mineClusters(
   scheme: RhymeScheme,
   options: MineOptions = {}
 ): ClusterCatalog {
-  const opts = { ...DEFAULT_OPTS, ...options };
-  const cacheKey = opts.tailOnly ? `${scheme.id}:tail` : `${scheme.id}:all`;
+  const opts = { ...DEFAULT_OPTS, toneMode: 'none' as ToneMode, ...options };
+  const cacheKey =
+    `${scheme.id}:${opts.toneMode}:${opts.tailOnly ? 'tail' : 'all'}`;
   let lexCache = BUCKET_CACHE.get(lexicon);
   if (!lexCache) {
     lexCache = new Map();

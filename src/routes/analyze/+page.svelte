@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ALL_SCHEMES, getScheme, TONE_MODE_LABEL } from '$lib/core/rhyme';
-  import type { RhymeSchemeId, ToneMode } from '$lib/core/rhyme';
+  import { strictScheme, TONE_MODE_LABEL } from '$lib/core/rhyme';
+  import type { ToneMode } from '$lib/core/rhyme';
   import { reverseAnalyze } from '$lib/core/analyze';
   import { base } from '$app/paths';
 
@@ -10,10 +10,9 @@
 都是同龄人我本来没想降维打击`;
 
   let text = $state(DEFAULT_TEXT);
-  let schemeId = $state<RhymeSchemeId>('xinyun');
   let toneMode = $state<ToneMode>('none');
 
-  const scheme = $derived(getScheme(schemeId));
+  const scheme = strictScheme; // only 严式 exposed
   const analysis = $derived(reverseAnalyze(text, scheme, toneMode));
 
   const TONE_MODES: ToneMode[] = ['none', 'pingze', 'exact'];
@@ -142,21 +141,6 @@
         onclick={() => presetExample(preset.text)}
       >
         {preset.name}
-      </button>
-    {/each}
-  </div>
-
-  <!-- Scheme selector -->
-  <div class="mb-3 flex items-center gap-2 text-sm">
-    <span class="text-zinc-500">押韵 scheme：</span>
-    {#each ALL_SCHEMES as s (s.id)}
-      <button
-        class="rounded border px-2.5 py-1 text-xs transition {schemeId === s.id
-          ? 'border-zinc-900 bg-zinc-900 text-white'
-          : 'border-zinc-300 dark:border-zinc-700 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-        onclick={() => (schemeId = s.id)}
-      >
-        {s.name}
       </button>
     {/each}
   </div>

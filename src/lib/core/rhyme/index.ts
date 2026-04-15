@@ -10,6 +10,7 @@ export type {
 
 export {
   ALL_SCHEMES,
+  ALL_KNOWN_SCHEMES,
   DEFAULT_SCHEME_ID,
   getScheme,
   strictScheme,
@@ -24,7 +25,9 @@ export {
 
 export {
   matchFull,
+  matchFullKeys,
   matchTail,
+  matchTailKeys,
   matchHead,
   keysFor
 } from './matcher.js';

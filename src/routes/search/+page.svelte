@@ -1,7 +1,7 @@
 <script lang="ts">
   import { parseSyllables } from '$lib/core/pinyin';
-  import { ALL_SCHEMES, getScheme } from '$lib/core/rhyme';
-  import type { RhymeSchemeId } from '$lib/core/rhyme';
+  import { strictScheme } from '$lib/core/rhyme';
+  import type { ToneMode } from '$lib/core/rhyme';
   import {
     getCurrentLexicon,
     ensureExtendedLexicon,
@@ -16,18 +16,21 @@
   // Defaults; URL-based overrides applied client-side in onMount so
   // prerender doesn't choke on searchParams access.
   let query = $state('降维打击');
-  let schemeId = $state<RhymeSchemeId>('xinyun');
   let mode = $state<SearchMode>('full');
+  let toneMode = $state<ToneMode>('none');
+  let requireTailMatch = $state(true);
   let urlReady = $state(false);
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('q');
-    const s = params.get('scheme');
     const m = params.get('mode');
+    const t = params.get('tone');
+    const tailReq = params.get('tail_req');
     if (q) query = q;
-    if (s === 'strict' || s === 'shisanzhe' || s === 'loose' || s === 'xinyun') schemeId = s;
     if (m === 'tail') mode = 'tail';
+    if (t === 'exact' || t === 'pingze') toneMode = t;
+    if (tailReq === '0') requireTailMatch = false;
     urlReady = true;
 
     // Fire-and-forget: swap in the big lexicon once it loads.
@@ -42,8 +45,9 @@
     if (!urlReady || typeof window === 'undefined') return;
     const params = new URLSearchParams();
     if (query.trim()) params.set('q', query.trim());
-    if (schemeId !== 'xinyun') params.set('scheme', schemeId);
     if (mode !== 'full') params.set('mode', mode);
+    if (toneMode !== 'none') params.set('tone', toneMode);
+    if (!requireTailMatch) params.set('tail_req', '0');
     const qs = params.toString();
     const url = `${base}/search/${qs ? '?' + qs : ''}`;
     if (window.location.pathname + window.location.search !== url) {
@@ -62,7 +66,7 @@
       .catch(() => {});
   }
 
-  const scheme = $derived(getScheme(schemeId));
+  const scheme = strictScheme; // only strict supported in UI
 
   // Start with whatever's cached (seed on first render, extended on
   // subsequent route visits). Then kick off the async fetch+merge so
@@ -71,13 +75,16 @@
 
   const querySyllables = $derived(parseSyllables(query));
   const queryFinals = $derived(querySyllables.map((s) => s.final));
-  const queryKeys = $derived(querySyllables.map((s) => scheme.keyOf(s.final)));
+  const queryTones = $derived(querySyllables.map((s) => s.tone));
 
   const fullResult = $derived(
     mode === 'full' && queryFinals.length > 0
       ? searchByFinals(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
-          maxPerBucket: 30
+          maxPerBucket: 30,
+          toneMode,
+          targetTones: queryTones,
+          requireTailMatch
         })
       : null
   );
@@ -87,7 +94,9 @@
       ? searchByTail(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
           minTailK: 2,
-          maxPerBucket: 30
+          maxPerBucket: 30,
+          toneMode,
+          targetTones: queryTones
         })
       : null
   );
@@ -135,19 +144,37 @@
     {/each}
   </div>
 
-  <!-- Scheme selector -->
-  <div class="mb-3 flex items-center gap-2 text-sm">
-    <span class="text-zinc-500">押韵 scheme：</span>
-    {#each ALL_SCHEMES as s (s.id)}
-      <button
-        class="rounded border px-2.5 py-1 text-xs transition {schemeId === s.id
-          ? 'border-zinc-900 bg-zinc-900 text-white'
-          : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
-        onclick={() => (schemeId = s.id)}
-      >
-        {s.name}
-      </button>
-    {/each}
+  <!-- Tone mode + tail-match -->
+  <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+    <span class="text-zinc-500">押韵严格度：</span>
+    <button
+      class="rounded border px-2.5 py-1 text-xs transition {toneMode === 'none'
+        ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+      title="仅要求韵母一致（如 iang = iang）"
+      onclick={() => (toneMode = 'none')}
+    >
+      韵母一致
+    </button>
+    <button
+      class="rounded border px-2.5 py-1 text-xs transition {toneMode === 'exact'
+        ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+      title="韵母+声调都必须一致（jiāng 和 jiǎng 不算押韵）"
+      onclick={() => (toneMode = 'exact')}
+    >
+      韵母+声调
+    </button>
+
+    <span class="ml-4 text-zinc-500">末位：</span>
+    <label class="inline-flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300">
+      <input
+        type="checkbox"
+        bind:checked={requireTailMatch}
+        class="accent-zinc-900 dark:accent-zinc-100"
+      />
+      <span title="末位（最后一个字）必须押韵，不押就不是押韵">必须押韵</span>
+    </label>
   </div>
 
   <!-- Query input -->
@@ -179,14 +206,14 @@
       {#each querySyllables as s, i (i)}
         <span
           class="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300"
-          title="{s.char} · {s.pinyinWithTone} · {queryKeys[i] || '?'}"
+          title="{s.char} · {s.pinyinWithTone} · {s.final || '?'}"
         >
           <span class="font-sans text-sm">{s.char}</span>
           <span class="ml-1 opacity-60">{s.final}</span>
         </span>
       {/each}
       <span class="text-zinc-400">·</span>
-      <span class="text-zinc-500">{queryKeys.filter(Boolean).join(' / ') || '未识别'}</span>
+      <span class="text-zinc-500">{queryFinals.filter(Boolean).join(' / ') || '未识别'}</span>
     </div>
   {/if}
 

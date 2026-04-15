@@ -75,6 +75,25 @@ function comparePositional(
   return buildMatch(per);
 }
 
+/** Compare two parallel PRE-COMPOSED key sequences. Empty-string keys
+ *  never match. Used by tone-aware search/miner paths that have
+ *  already combined (final, tone, scheme) via composeKey. */
+function compareKeys(
+  keysA: readonly string[],
+  keysB: readonly string[]
+): RhymeMatch {
+  if (keysA.length !== keysB.length) {
+    throw new Error(
+      `compareKeys requires equal-length sequences (got ${keysA.length} vs ${keysB.length})`
+    );
+  }
+  const per: boolean[] = new Array(keysA.length);
+  for (let i = 0; i < keysA.length; i++) {
+    per[i] = keysA[i] !== '' && keysA[i] === keysB[i];
+  }
+  return buildMatch(per);
+}
+
 /**
  * FULL-mode match: target and candidate must have the same length, then
  * each position is compared directly.
@@ -89,6 +108,29 @@ export function matchFull(
 ): RhymeMatch | null {
   if (target.length !== candidate.length) return null;
   return comparePositional(target, candidate, scheme);
+}
+
+/** Same as matchFull but operates on already-composed key arrays (e.g.
+ *  output of `composeKey` that bakes in the scheme + tone). */
+export function matchFullKeys(
+  target: readonly string[],
+  candidate: readonly string[]
+): RhymeMatch | null {
+  if (target.length !== candidate.length) return null;
+  return compareKeys(target, candidate);
+}
+
+/** Same as matchTail but operates on composed key arrays. */
+export function matchTailKeys(
+  target: readonly string[],
+  candidate: readonly string[],
+  k: number = Number.POSITIVE_INFINITY
+): RhymeMatch {
+  const window = Math.max(0, Math.min(k, target.length, candidate.length));
+  if (window === 0) return buildMatch([]);
+  const tA = target.slice(target.length - window);
+  const tB = candidate.slice(candidate.length - window);
+  return compareKeys(tA, tB);
 }
 
 /**

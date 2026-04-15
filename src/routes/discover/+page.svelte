@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ALL_SCHEMES, getScheme } from '$lib/core/rhyme';
-  import type { RhymeSchemeId } from '$lib/core/rhyme';
+  import { strictScheme } from '$lib/core/rhyme';
+  import type { ToneMode } from '$lib/core/rhyme';
   import {
     getCurrentLexicon,
     ensureExtendedLexicon
@@ -19,7 +19,7 @@
   //   saved:    user's favorite clusters from localStorage
   type Lens = 'featured' | 'deep' | 'cross' | 'gems' | 'saved';
 
-  let schemeId = $state<RhymeSchemeId>('xinyun');
+  let toneMode = $state<ToneMode>('none');
   let minDepth = $state(2);
   let minMembers = $state(3);
   let tailOnly = $state(true);
@@ -32,14 +32,14 @@
   // searchParams during SvelteKit's build-time prerender.
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
-    const s = params.get('scheme');
     const d = Number.parseInt(params.get('depth') ?? '', 10);
     const m = Number.parseInt(params.get('members') ?? '', 10);
     const t = params.get('tail');
-    if (s === 'strict' || s === 'shisanzhe' || s === 'loose' || s === 'xinyun') schemeId = s;
+    const tone = params.get('tone');
     if (Number.isFinite(d) && d >= 1) minDepth = d;
     if (Number.isFinite(m) && m >= 2) minMembers = m;
     if (t === 'all') tailOnly = false;
+    if (tone === 'exact' || tone === 'pingze') toneMode = tone;
     const lensParam = params.get('lens');
     if (
       lensParam === 'deep' ||
@@ -68,7 +68,7 @@
   $effect(() => {
     if (!urlReady || typeof window === 'undefined') return;
     const qp = new URLSearchParams();
-    if (schemeId !== 'xinyun') qp.set('scheme', schemeId);
+    if (toneMode !== 'none') qp.set('tone', toneMode);
     if (minDepth !== 2) qp.set('depth', String(minDepth));
     if (minMembers !== 3) qp.set('members', String(minMembers));
     if (!tailOnly) qp.set('tail', 'all');
@@ -80,17 +80,17 @@
     }
   });
 
-  const scheme = $derived(getScheme(schemeId));
+  const scheme = strictScheme; // UI exposes only 严式
 
-  // Mine a generous batch of clusters (cleverness-sorted), then let the
-  // active lens re-filter / re-sort the list client-side. The bucket
-  // cache in miner.ts makes repeat calls with the same (scheme, tailOnly)
-  // cheap (~15ms on 30k lexicon).
+  // Mine a generous batch of clusters. Bucket cache is keyed by
+  // (lexicon, scheme.id, toneMode, tailOnly) so flipping tone or filters
+  // stays cheap.
   const rawCatalog = $derived(
     mineClusters(lexicon, scheme, {
       minPatternLength: minDepth,
       minMembers,
       tailOnly,
+      toneMode,
       maxClusters: 2000
     })
   );
@@ -232,18 +232,26 @@
   <!-- Controls -->
   <div class="mb-6 grid gap-3 sm:grid-cols-4">
     <div>
-      <p class="mb-1 text-xs text-zinc-500">押韵 scheme</p>
+      <p class="mb-1 text-xs text-zinc-500">严格度</p>
       <div class="flex flex-wrap gap-1">
-        {#each ALL_SCHEMES as s (s.id)}
-          <button
-            class="rounded border px-2 py-1 text-xs transition {schemeId === s.id
-              ? 'border-zinc-900 bg-zinc-900 text-white'
-              : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
-            onclick={() => (schemeId = s.id)}
-          >
-            {s.name}
-          </button>
-        {/each}
+        <button
+          class="rounded border px-2 py-1 text-xs transition {toneMode === 'none'
+            ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+            : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+          onclick={() => (toneMode = 'none')}
+          title="仅比较韵母"
+        >
+          韵母
+        </button>
+        <button
+          class="rounded border px-2 py-1 text-xs transition {toneMode === 'exact'
+            ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+            : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+          onclick={() => (toneMode = 'exact')}
+          title="韵母+声调都必须一致"
+        >
+          韵母+声调
+        </button>
       </div>
     </div>
     <div>
@@ -371,18 +379,28 @@
               {@const chars = [...phrase.text]}
               {@const matchStart = phrase.length - cluster.patternLength - m.tailOffset}
               {@const matchEnd = phrase.length - m.tailOffset}
-              <li class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-1.5">
-                <div class="flex items-center gap-[2px]">
+              <li class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2">
+                <div class="flex items-end gap-[3px]">
                   {#each chars as ch, i (i)}
                     {@const inMatch = i >= matchStart && i < matchEnd}
-                    <span
-                      class="inline-flex min-w-[1.4em] justify-center rounded px-[3px] py-[1px] text-sm {inMatch
-                        ? 'bg-sky-100 font-semibold text-sky-900 dark:bg-sky-900/40 dark:text-sky-200'
-                        : 'text-zinc-500 dark:text-zinc-400'}"
-                      title={phrase.finals[i] ? `${ch} · ${phrase.finals[i]}` : ch}
+                    {@const py = phrase.pinyinWithTone?.[i] ?? ''}
+                    <div
+                      class="flex min-w-[2em] flex-col items-center gap-0 rounded px-[4px] py-[2px] {inMatch
+                        ? 'bg-sky-100 dark:bg-sky-900/40'
+                        : ''}"
+                      title={phrase.finals[i] ? `${ch} · ${py} · ${phrase.finals[i]}` : ch}
                     >
-                      {ch}
-                    </span>
+                      <span
+                        class="text-sm leading-tight {inMatch
+                          ? 'font-semibold text-sky-900 dark:text-sky-200'
+                          : 'text-zinc-600 dark:text-zinc-400'}"
+                      >{ch}</span>
+                      <span
+                        class="font-mono text-[9px] leading-tight {inMatch
+                          ? 'text-sky-700/80 dark:text-sky-300/80'
+                          : 'text-zinc-400 dark:text-zinc-500'}"
+                      >{py}</span>
+                    </div>
                   {/each}
                 </div>
               </li>

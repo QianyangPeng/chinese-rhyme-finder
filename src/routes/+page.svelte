@@ -1,6 +1,6 @@
 <script lang="ts">
   import { parseSyllables } from '$lib/core/pinyin';
-  import { ALL_SCHEMES, matchFull, xinyunScheme } from '$lib/core/rhyme';
+  import { ALL_SCHEMES, matchFull, strictScheme } from '$lib/core/rhyme';
   import type { Syllable } from '$lib/core/pinyin';
   import { getCurrentLexicon, ensureExtendedLexicon } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
@@ -12,12 +12,14 @@
   // here because this is a headline stat, not a render list.
   let lexicon = $state(getCurrentLexicon());
   const clusterCount = $derived(
-    mineClusters(lexicon, xinyunScheme, { maxClusters: Infinity }).clusters.length
+    mineClusters(lexicon, strictScheme, { maxClusters: Infinity }).clusters.length
   );
   const STATS = $derived({
     phrases: lexicon.phrases.length,
     clusters: clusterCount,
-    schemes: ALL_SCHEMES.length
+    // Only 严式 scheme surfaced in UI; "严格度" refers to tone toggle
+    // (韵母 / 韵母+声调). Keep the number honest.
+    schemes: 2
   });
 
   onMount(() => {
@@ -81,7 +83,7 @@
       <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.clusters}</p>
     </div>
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
-      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">押韵 scheme</p>
+      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">押韵严格度</p>
       <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.schemes}</p>
     </div>
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
@@ -177,7 +179,7 @@
                   <th class="py-1">字</th>
                   <th class="py-1">拼音</th>
                   <th class="py-1">韵母</th>
-                  <th class="py-1">十三辙</th>
+                  <th class="py-1">声调</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,8 +192,8 @@
                     <td class="py-1.5 font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                       {s.final}
                     </td>
-                    <td class="py-1.5 text-zinc-600 dark:text-zinc-400">
-                      {ALL_SCHEMES[1].keyOf(s.final) || '—'}
+                    <td class="py-1.5 font-mono text-zinc-600 dark:text-zinc-400">
+                      {s.tone > 0 ? s.tone : '轻'}
                     </td>
                   </tr>
                 {/each}

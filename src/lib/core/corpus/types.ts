@@ -19,6 +19,13 @@ export interface PhraseRecord {
   readonly length: number;
   /** Per-syllable canonical 韵母 (e.g., ["uen", "uan", "ua", "ai"]). */
   readonly finals: readonly string[];
+  /** Per-syllable tone 0-4 (0 = 轻声). Same length as `finals`. Optional
+   *  because older lexicon JSONs may not carry them; callers should
+   *  fall back to tone-unaware matching when absent. */
+  readonly tones?: readonly number[];
+  /** Per-syllable pinyin WITH tone marks (e.g., ["chūn","nuǎn","huā","kāi"]).
+   *  Used purely for display (Discover chip labels, debug views). Optional. */
+  readonly pinyinWithTone?: readonly string[];
   /** Quality score 0..1. Hand-curated seed entries default to 0.8. */
   readonly quality: number;
   /** Coarse category labels (idiom, lyric, modern, tech, …). */
