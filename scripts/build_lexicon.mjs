@@ -33,6 +33,9 @@ const OUTPUT_PATH = path.join(REPO_ROOT, 'static', 'data', 'lexicon.json');
 const XINHUA_URL =
   'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/idiom.json';
 const XINHUA_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'xinhua-idiom.json');
+const XIEHOUYU_URL =
+  'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/xiehouyu.json';
+const XIEHOUYU_CACHE = path.join(REPO_ROOT, 'scripts', '.cache', 'xinhua-xiehouyu.json');
 
 // ─── CLI parsing ───────────────────────────────────────────────────────
 
@@ -47,8 +50,10 @@ const flags = Object.fromEntries(
 );
 
 const XINHUA_LOCAL = flags.xinhua ?? null;
+const XIEHOUYU_LOCAL = flags.xiehouyu ?? null;
 const MAX_ENTRIES = flags.max ? parseInt(String(flags.max), 10) : Infinity;
 const SKIP_DOWNLOAD = !!flags['no-download'];
+const SKIP_XIEHOUYU = !!flags['no-xiehouyu'];
 
 // ─── Fetch helpers ─────────────────────────────────────────────────────
 
@@ -101,6 +106,26 @@ async function loadXinhuaIdioms() {
   const raw = await fsp.readFile(source, 'utf-8');
   const arr = JSON.parse(raw);
   if (!Array.isArray(arr)) throw new Error('xinhua JSON is not an array');
+  return arr;
+}
+
+async function loadXiehouyu() {
+  let source;
+  if (XIEHOUYU_LOCAL) {
+    source = XIEHOUYU_LOCAL;
+  } else if (fs.existsSync(XIEHOUYU_CACHE)) {
+    source = XIEHOUYU_CACHE;
+  } else if (SKIP_DOWNLOAD) {
+    return []; // xiehouyu is optional
+  } else {
+    console.error(`[xiehouyu] downloading ${XIEHOUYU_URL}`);
+    await downloadToFile(XIEHOUYU_URL, XIEHOUYU_CACHE);
+    console.error(`[xiehouyu] cached to ${XIEHOUYU_CACHE}`);
+    source = XIEHOUYU_CACHE;
+  }
+  const raw = await fsp.readFile(source, 'utf-8');
+  const arr = JSON.parse(raw);
+  if (!Array.isArray(arr)) return [];
   return arr;
 }
 
@@ -268,9 +293,6 @@ function processXinhuaEntry(entry) {
   if (chineseCharCount(text) < 2) return null;
   if (text.length > 15) return null;
 
-  // Use pinyin-pro with the text (more consistent with runtime) rather
-  // than the dataset's own `pinyin` field — handles 多音字 context the
-  // same way the live engine does.
   const py = pinyin(text, {
     type: 'array',
     toneType: 'symbol',
@@ -289,6 +311,76 @@ function processXinhuaEntry(entry) {
     tags: ['idiom', 'xinhua'],
     source: 'xinhua-idiom'
   };
+}
+
+/**
+ * Score a xiehouyu "answer" candidate. These are colloquial, image-heavy
+ * phrases that slot naturally into modern rap/songs. We favor mid-length
+ * (3-5 char) answers over very long ones, penalize filler-led starts,
+ * and mildly penalize answers that look too similar to the riddle's
+ * rhetorical frame (e.g., "…了", "…得很").
+ */
+const XIEHOUYU_FILLER_STARTS = ['的', '了', '是', '就', '也', '又', '还', '都'];
+
+function scoreXiehouyuAnswer(text) {
+  let score = 0.55;
+  const n = text.length;
+
+  // Length preference: 3-5 char is the sweet spot.
+  if (n === 4) score += 0.14;
+  else if (n === 3 || n === 5) score += 0.1;
+  else if (n === 2) score += 0.05;
+  else if (n === 6) score += 0.02;
+  else score -= 0.1;
+
+  // Filler-led → penalty.
+  if (XIEHOUYU_FILLER_STARTS.some((f) => text.startsWith(f))) score -= 0.1;
+
+  // Avoid trailing particles that usually mark non-phrase fragments.
+  if (/[了啊呢吗的呀]$/.test(text) && n <= 3) score -= 0.15;
+
+  // A touch of positive weight for vivid verbs / imagery markers.
+  if (/[打击踢杀拍抱喊笑哭骂吃吹]/.test(text)) score += 0.03;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function processXiehouyuEntry(entry) {
+  const rawAnswer = (entry.answer || '').trim();
+  if (!rawAnswer) return [];
+
+  // Answers can contain multiple alternatives separated by ；/;/、.
+  const parts = rawAnswer
+    .split(/[；;、]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const out = [];
+  for (const text of parts) {
+    if (chineseCharCount(text) < 2) continue;
+    if (text.length < 2 || text.length > 7) continue;
+
+    const py = pinyin(text, {
+      type: 'array',
+      toneType: 'symbol',
+      multiple: false
+    });
+    const finals = py.map(extractFinal);
+    if (finals.some((f) => !f || !VALID_FINALS.has(f))) continue;
+
+    const quality = scoreXiehouyuAnswer(text);
+    if (quality < 0.5) continue;
+
+    out.push({
+      text,
+      finals,
+      length: finals.length,
+      quality: Math.round(quality * 10000) / 10000,
+      tags: ['xiehouyu', 'colloquial'],
+      source: 'xinhua-xiehouyu'
+    });
+  }
+  return out;
 }
 
 async function main() {
@@ -315,8 +407,37 @@ async function main() {
   }
 
   console.error(
-    `[build] kept ${records.length}, dropped ${drops.parse} (parse) + ${drops.dup} (dup)`
+    `[xinhua build] kept ${records.length}, dropped ${drops.parse} (parse) + ${drops.dup} (dup)`
   );
+
+  // ─── Second source: xiehouyu answers ─────────────────────────────
+  if (!SKIP_XIEHOUYU && records.length < MAX_ENTRIES) {
+    const xhyRaw = await loadXiehouyu();
+    console.error(`[xiehouyu] ${xhyRaw.length} raw xiehouyu entries`);
+    let xhyKept = 0;
+    const xhyDrops = { parse: 0, dup: 0, quality: 0 };
+    for (const entry of xhyRaw) {
+      const recs = processXiehouyuEntry(entry);
+      for (const rec of recs) {
+        if (!rec) {
+          xhyDrops.parse++;
+          continue;
+        }
+        if (seen.has(rec.text)) {
+          xhyDrops.dup++;
+          continue;
+        }
+        seen.add(rec.text);
+        records.push(rec);
+        xhyKept++;
+        if (records.length >= MAX_ENTRIES) break;
+      }
+      if (records.length >= MAX_ENTRIES) break;
+    }
+    console.error(
+      `[xiehouyu build] added ${xhyKept}, dropped ${xhyDrops.dup} (dup with xinhua)`
+    );
+  }
 
   // Sort by quality desc, then text, for stable diffs across runs.
   records.sort((a, b) => {

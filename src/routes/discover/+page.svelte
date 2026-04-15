@@ -205,7 +205,8 @@
     </div>
   {:else if lexicon.phrases.length >= 5000}
     <div class="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-      词库已加载 <span class="font-semibold">{lexicon.phrases.length}</span> 条（种子 + 新华成语）。
+      词库已加载 <span class="font-semibold">{lexicon.phrases.length}</span> 条
+      （手工种子 + 新华成语 + 歇后语答案）。
     </div>
   {:else}
     <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
