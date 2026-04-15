@@ -10,7 +10,11 @@ const config = {
     adapter: adapter({
       pages: 'build',
       assets: 'build',
-      fallback: 'index.html', // SPA mode (client-side routing)
+      // GitHub Pages serves 404.html for any unknown path; pointing the
+      // SvelteKit fallback at it lets the SPA take over and handle the
+      // route client-side. We also copy 404.html → index.html in package
+      // scripts so the homepage works as plain index.
+      fallback: '404.html',
       precompress: false,
       strict: true
     }),
