@@ -27,12 +27,13 @@
 - [x] `src/lib/core/rhyme/relaxation.ts` — 分级宽松枚举（Level 0 ~ N）
 - [x] 单元测试：36 用例全过
 
-### P1.3 词库与索引（依赖 P1.2）
+### P1.3 词库与索引（依赖 P1.2）✅（部分）
 
-- [ ] `data/lexicon-v0.bin` — 第一版 50k 词条（成语 + jieba 高频词 + 简单流行词）
-- [ ] `src/core/corpus/loader.ts` — 加载 .bin（TypedArray）
-- [ ] `src/core/corpus/index.ts` — 倒排索引（rhyme pattern → phrase IDs）
-- [ ] `src/core/corpus/lookup.ts` — 多 K-gram 查询
+- [x] `src/lib/core/corpus/seed-data.ts` — 200+ 条 hand-curated 引导词库（覆盖 13 辙）
+- [x] `src/lib/core/corpus/loader.ts` — 加载 + 解析 finals + 去重 + 长度索引
+- [x] `src/lib/core/corpus/types.ts` — Lexicon / PhraseRecord 类型
+- [ ] `data/lexicon-v0.bin` — 50k 条二进制词库（待 P1.4 Python 管道）
+- [ ] 倒排索引（rhyme pattern → phrase IDs）— 待词库扩到 ~10k+ 后再做（现在 byLength 够用）
 
 ### P1.4 数据准备脚本（Python，离线，依赖：无）
 
@@ -43,11 +44,11 @@
 
 ### P1.5 多策略搜索（依赖 P1.3）
 
-- [ ] `src/core/search/strategies/direct_match.ts`
-- [ ] `src/core/search/strategies/splice_2_2.ts`
-- [ ] `src/core/search/strategies/template_fill.ts`
-- [ ] `src/core/search/validator.ts` — phonology 强校验（守门员）
-- [ ] `src/core/search/ranker.ts` — 多维度排序
+- [x] `src/lib/core/corpus/search.ts` — 直接匹配 + 分级宽松（Q16 自动遍历）
+- [ ] `splice_2_2.ts` — 2+2 拼接（需要更大词库才有意义）
+- [ ] `template_fill.ts` — 模板填充（待 P1.4 拿到模板抽取数据）
+- [x] phonology 强校验（已嵌在 corpus/loader 里）
+- [x] 排序（按 quality desc + 文本字典序，stable）
 
 ### P1.6 Cluster 挖掘（Python 离线 + 前端展示）
 
@@ -64,10 +65,12 @@
 - [ ] `src/lib/components/RhymeVisual.svelte` — 韵母色块高亮
 - [ ] localStorage 收藏
 
-### P1.8 Search UI（依赖 P1.5）
+### P1.8 Search UI（依赖 P1.5）✅
 
-- [ ] `src/routes/search/+page.svelte` — 输入框 + 分级宽松结果展示
-- [ ] 多音字交互式选择（气泡）
+- [x] `src/routes/search/+page.svelte` — 输入框 + 分级宽松结果展示（Level 0 → N）
+- [x] Scheme 即时切换（严式 / 十三辙 / 宽松邻韵）
+- [x] 韵母 chip 展示 + 匹配/未匹配色块
+- [ ] 多音字交互式选择（气泡）— 推迟到 Phase 2
 
 ### P1.9 Analyze UI（依赖 P1.2）✅
 

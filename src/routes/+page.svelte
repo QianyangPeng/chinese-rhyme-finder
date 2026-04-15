@@ -237,9 +237,14 @@
         — 系统主动展示算法挖掘的押韵 cluster，按巧妙度排序
       </li>
       <li>
-        <span class="font-semibold">🔍 Search</span>
-        <span class="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">P1 · 开发中</span>
-        — 输入词组，分级宽松（严式 → 邻韵）查找押韵候选
+        <a
+          href="{base}/search"
+          class="font-semibold text-zinc-900 underline hover:text-zinc-700"
+        >
+          🔍 Search →
+        </a>
+        <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-700">就绪</span>
+        — 输入词组，分级宽松（严式 → 邻韵）查找押韵候选（内置 200+ 词条种子库）
       </li>
       <li>
         <a
