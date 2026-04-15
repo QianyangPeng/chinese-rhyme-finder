@@ -4,11 +4,43 @@
   import { getDefaultLexicon } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
+  import { onMount } from 'svelte';
 
   let schemeId = $state<RhymeSchemeId>('shisanzhe');
   let minDepth = $state(2);
   let minMembers = $state(3);
   let tailOnly = $state(true);
+  let urlReady = $state(false);
+
+  // URL-based state overrides applied only after mount to avoid touching
+  // searchParams during SvelteKit's build-time prerender.
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get('scheme');
+    const d = Number.parseInt(params.get('depth') ?? '', 10);
+    const m = Number.parseInt(params.get('members') ?? '', 10);
+    const t = params.get('tail');
+    if (s === 'strict' || s === 'shisanzhe' || s === 'loose') schemeId = s;
+    if (Number.isFinite(d) && d >= 1) minDepth = d;
+    if (Number.isFinite(m) && m >= 2) minMembers = m;
+    if (t === 'all') tailOnly = false;
+    urlReady = true;
+  });
+
+  // Mirror state → URL for sharing.
+  $effect(() => {
+    if (!urlReady || typeof window === 'undefined') return;
+    const qp = new URLSearchParams();
+    if (schemeId !== 'shisanzhe') qp.set('scheme', schemeId);
+    if (minDepth !== 2) qp.set('depth', String(minDepth));
+    if (minMembers !== 3) qp.set('members', String(minMembers));
+    if (!tailOnly) qp.set('tail', 'all');
+    const qs = qp.toString();
+    const url = `${base}/discover/${qs ? '?' + qs : ''}`;
+    if (window.location.pathname + window.location.search !== url) {
+      history.replaceState(history.state, '', url);
+    }
+  });
 
   const lexicon = getDefaultLexicon();
   const scheme = $derived(getScheme(schemeId));

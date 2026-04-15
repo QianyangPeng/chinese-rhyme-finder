@@ -4,9 +4,47 @@
   import type { RhymeSchemeId } from '$lib/core/rhyme';
   import { getDefaultLexicon, searchByFinals } from '$lib/core/corpus';
   import { base } from '$app/paths';
+  import { onMount } from 'svelte';
 
+  // Defaults; URL-based overrides applied client-side in onMount so
+  // prerender doesn't choke on searchParams access.
   let query = $state('降维打击');
   let schemeId = $state<RhymeSchemeId>('shisanzhe');
+  let urlReady = $state(false);
+
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    const s = params.get('scheme');
+    if (q) query = q;
+    if (s === 'strict' || s === 'shisanzhe' || s === 'loose') schemeId = s;
+    urlReady = true;
+  });
+
+  // Mirror state back into the URL so results are shareable. Waits until
+  // `urlReady` to avoid clobbering the URL during hydration.
+  $effect(() => {
+    if (!urlReady || typeof window === 'undefined') return;
+    const params = new URLSearchParams();
+    if (query.trim()) params.set('q', query.trim());
+    if (schemeId !== 'shisanzhe') params.set('scheme', schemeId);
+    const qs = params.toString();
+    const url = `${base}/search/${qs ? '?' + qs : ''}`;
+    if (window.location.pathname + window.location.search !== url) {
+      history.replaceState(history.state, '', url);
+    }
+  });
+
+  let copiedAt = $state<number>(0);
+  function shareLink() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(window.location.href)
+      .then(() => {
+        copiedAt = Date.now();
+      })
+      .catch(() => {});
+  }
 
   const scheme = $derived(getScheme(schemeId));
   const lexicon = getDefaultLexicon(); // built once, cached
@@ -79,12 +117,26 @@
   </div>
 
   <!-- Query input -->
-  <input
-    type="text"
-    bind:value={query}
-    placeholder="例如：降维打击"
-    class="block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-  />
+  <div class="flex gap-2">
+    <input
+      type="text"
+      bind:value={query}
+      placeholder="例如：降维打击"
+      class="block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+    />
+    <button
+      type="button"
+      onclick={shareLink}
+      class="shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+      title="复制当前搜索的分享链接"
+    >
+      {#if copiedAt && Date.now() - copiedAt < 2000}
+        ✓ 已复制
+      {:else}
+        🔗 分享
+      {/if}
+    </button>
+  </div>
 
   <!-- Query analysis breadcrumb -->
   {#if querySyllables.length > 0}
