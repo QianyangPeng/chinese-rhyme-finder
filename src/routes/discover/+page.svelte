@@ -43,16 +43,16 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-zinc-900">
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
       Discover · 灵感发现
     </h1>
-    <p class="mt-2 text-base text-zinc-600">
+    <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
       算法挖掘出来的押韵 cluster — 按巧妙度排序。每组里所有短语能套到同一个韵脚。
     </p>
   </header>
 
   <!-- Bootstrap notice -->
-  <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-zinc-700">
+  <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
     种子词库只有 {lexicon.phrases.length} 条，cluster 数量受限。Phase 1.4
     Python 数据管道扩到 50k+ 后，Discover 才真正发挥作用。
   </div>
@@ -66,7 +66,7 @@
           <button
             class="rounded border px-2 py-1 text-xs transition {schemeId === s.id
               ? 'border-zinc-900 bg-zinc-900 text-white'
-              : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}"
+              : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
             onclick={() => (schemeId = s.id)}
           >
             {s.name}
@@ -78,7 +78,7 @@
       <p class="mb-1 text-xs text-zinc-500">最低押韵深度</p>
       <select
         bind:value={minDepth}
-        class="rounded border border-zinc-300 bg-white px-2 py-1 text-xs"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs"
       >
         <option value={1}>1 押</option>
         <option value={2}>2 押</option>
@@ -90,7 +90,7 @@
       <p class="mb-1 text-xs text-zinc-500">最少成员</p>
       <select
         bind:value={minMembers}
-        class="rounded border border-zinc-300 bg-white px-2 py-1 text-xs"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs"
       >
         <option value={2}>2</option>
         <option value={3}>3</option>
@@ -104,7 +104,7 @@
         <button
           class="rounded border px-2 py-1 text-xs transition {tailOnly
             ? 'border-zinc-900 bg-zinc-900 text-white'
-            : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}"
+            : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
           onclick={() => (tailOnly = true)}
         >
           仅尾部
@@ -112,7 +112,7 @@
         <button
           class="rounded border px-2 py-1 text-xs transition {!tailOnly
             ? 'border-zinc-900 bg-zinc-900 text-white'
-            : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}"
+            : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
           onclick={() => (tailOnly = false)}
         >
           全位置
@@ -121,19 +121,19 @@
     </div>
   </div>
 
-  <p class="mb-4 text-sm text-zinc-600">
-    找到 <span class="font-semibold text-zinc-900">{catalog.clusters.length}</span> 组 cluster
+  <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+    找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{catalog.clusters.length}</span> 组 cluster
   </p>
 
   <!-- Cluster cards -->
   {#if catalog.clusters.length === 0}
-    <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center text-sm text-zinc-500">
       当前条件下没有 cluster — 试试调低"最少成员"或"押韵深度"。
     </div>
   {:else}
     <div class="space-y-3">
       {#each catalog.clusters as cluster (cluster.id)}
-        <article class="rounded-lg border border-zinc-200 bg-white p-4">
+        <article class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <header class="mb-3 flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-1.5 font-mono text-xs">
@@ -162,7 +162,7 @@
               </p>
             </div>
             <button
-              class="shrink-0 rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
+              class="shrink-0 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900"
               title="复制成员列表"
               onclick={() =>
                 copyText(
@@ -178,7 +178,7 @@
           <ul class="flex flex-wrap gap-2">
             {#each cluster.members as m (m.phraseId)}
               {@const phrase = catalog.lexiconRef[m.phraseId]}
-              <li class="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-sm">
+              <li class="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1 text-sm">
                 {phrase.text}
               </li>
             {/each}
@@ -188,17 +188,17 @@
     </div>
   {/if}
 
-  <footer class="mt-12 border-t border-zinc-200 pt-6 text-sm text-zinc-500">
+  <footer class="mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
-      <a href="{base}/" class="text-zinc-700 underline hover:text-zinc-900">主页</a>
+      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">主页</a>
       ·
-      <a href="{base}/search" class="text-zinc-700 underline hover:text-zinc-900">查找押韵</a>
+      <a href="{base}/search" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">查找押韵</a>
       ·
-      <a href="{base}/analyze" class="text-zinc-700 underline hover:text-zinc-900">反向分析</a>
+      <a href="{base}/analyze" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">反向分析</a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
-        class="text-zinc-700 underline hover:text-zinc-900"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
       >
         GitHub
       </a>

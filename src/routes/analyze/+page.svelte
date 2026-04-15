@@ -62,7 +62,7 @@
       const tint = GROUP_TINTS[colorIdx];
       return `${tint.bg} ${tint.text} ring-1 ${tint.ring}`;
     }
-    return 'bg-zinc-100 text-zinc-700';
+    return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300';
   }
 
   function presetExample(t: string) {
@@ -104,8 +104,8 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-zinc-900">反向分析</h1>
-    <p class="mt-2 text-base text-zinc-600">
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">反向分析</h1>
+    <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
       把歌词粘进来，看每行押什么、和哪些行相互押。
     </p>
   </header>
@@ -115,7 +115,7 @@
     <span class="text-zinc-500">示例：</span>
     {#each PRESETS as preset (preset.name)}
       <button
-        class="rounded border border-zinc-300 bg-white px-2 py-1 hover:bg-zinc-50"
+        class="rounded border border-zinc-300 dark:border-zinc-700 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => presetExample(preset.text)}
       >
         {preset.name}
@@ -130,7 +130,7 @@
       <button
         class="rounded border px-2.5 py-1 text-xs transition {schemeId === s.id
           ? 'border-zinc-900 bg-zinc-900 text-white'
-          : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}"
+          : 'border-zinc-300 dark:border-zinc-700 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
         onclick={() => (schemeId = s.id)}
       >
         {s.name}
@@ -142,25 +142,25 @@
   <textarea
     bind:value={text}
     rows={6}
-    class="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+    class="block w-full rounded-md border border-zinc-300 dark:border-zinc-700 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
     placeholder="粘贴几行歌词或诗句…"
   ></textarea>
 
   <!-- Top-line stats -->
   <section class="mt-6 grid gap-3 sm:grid-cols-3">
-    <div class="rounded-lg border border-zinc-200 bg-white p-4">
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
       <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">最强尾押</p>
-      <p class="mt-1 text-2xl font-bold text-zinc-900">
+      <p class="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
         {analysis.maxTailK} <span class="text-base font-normal text-zinc-500">押</span>
       </p>
     </div>
-    <div class="rounded-lg border border-zinc-200 bg-white p-4">
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
       <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">行数</p>
-      <p class="mt-1 text-2xl font-bold text-zinc-900">{analysis.lines.length}</p>
+      <p class="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{analysis.lines.length}</p>
     </div>
-    <div class="rounded-lg border border-zinc-200 bg-white p-4">
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
       <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">押韵组</p>
-      <p class="mt-1 text-2xl font-bold text-zinc-900">{analysis.groups.length}</p>
+      <p class="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{analysis.groups.length}</p>
       {#if analysis.groups.length > 0}
         <p class="mt-1 text-xs text-zinc-500">
           {analysis.groups
@@ -173,7 +173,7 @@
 
   <!-- Per-line view with color-coded chips -->
   <section class="mt-6">
-    <h2 class="mb-3 text-lg font-semibold text-zinc-900">逐行解读</h2>
+    <h2 class="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">逐行解读</h2>
     {#if analysis.lines.every((l) => l.syllables.length === 0)}
       <p class="text-sm text-zinc-500">输入区还没有可分析的中文音节。</p>
     {:else}
@@ -181,13 +181,13 @@
         {#each analysis.lines as line (line.index)}
           {@const colorIdx = lineColorMap[line.index]}
           <div
-            class="rounded-lg border bg-white p-4 transition {colorIdx !== undefined
+            class="rounded-lg border bg-white dark:bg-zinc-900 p-4 transition {colorIdx !== undefined
               ? `${GROUP_TINTS[colorIdx].ring} ring-1`
-              : 'border-zinc-200'}"
+              : 'border-zinc-200 dark:border-zinc-800'}"
           >
             <div class="mb-2 flex items-baseline gap-3">
               <span class="font-mono text-xs text-zinc-400">L{line.index + 1}</span>
-              <span class="text-sm text-zinc-700">{line.text || '（空行）'}</span>
+              <span class="text-sm text-zinc-700 dark:text-zinc-300">{line.text || '（空行）'}</span>
             </div>
             {#if line.syllables.length > 0}
               <div class="flex flex-wrap gap-1.5 font-mono text-xs">
@@ -217,14 +217,14 @@
   <!-- Pair matrix (if more than one rhyming pair) -->
   {#if analysis.pairs.length > 0}
     <section class="mt-6">
-      <h2 class="mb-3 text-lg font-semibold text-zinc-900">行对行押韵深度</h2>
+      <h2 class="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">行对行押韵深度</h2>
       <p class="mb-3 text-xs text-zinc-500">
         每格两个数：尾押 / 头押。0 表示无押韵。
       </p>
-      <div class="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+      <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <table class="w-full text-xs">
           <thead>
-            <tr class="border-b border-zinc-200 text-zinc-500">
+            <tr class="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500">
               <th class="px-3 py-2 text-left font-mono">·</th>
               {#each analysis.lines as line (line.index)}
                 <th class="px-3 py-2 font-mono">L{line.index + 1}</th>
@@ -233,7 +233,7 @@
           </thead>
           <tbody>
             {#each analysis.lines as rowLine (rowLine.index)}
-              <tr class="border-b border-zinc-100 last:border-0">
+              <tr class="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
                 <td class="px-3 py-2 font-mono text-zinc-500">L{rowLine.index + 1}</td>
                 {#each analysis.lines as colLine (colLine.index)}
                   {@const pair = analysis.pairs.find(
@@ -269,15 +269,15 @@
     </section>
   {/if}
 
-  <footer class="mt-12 border-t border-zinc-200 pt-6 text-sm text-zinc-500">
+  <footer class="mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
-      <a href="{base}/" class="text-zinc-700 underline hover:text-zinc-900">
+      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">
         返回主页
       </a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
-        class="text-zinc-700 underline hover:text-zinc-900"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
       >
         GitHub
       </a>

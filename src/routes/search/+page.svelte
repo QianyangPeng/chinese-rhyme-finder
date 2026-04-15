@@ -44,8 +44,8 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-zinc-900">查找押韵</h1>
-    <p class="mt-2 text-base text-zinc-600">
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">查找押韵</h1>
+    <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
       输入一个词组，从内置词库中查找等长且押韵的候选 — 按"严格 → 宽松"分层展示。
     </p>
   </header>
@@ -55,7 +55,7 @@
     <span class="text-zinc-500">试试：</span>
     {#each PRESETS as preset (preset)}
       <button
-        class="rounded border border-zinc-300 bg-white px-2 py-1 hover:bg-zinc-50"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900"
         onclick={() => presetExample(preset)}
       >
         {preset}
@@ -70,7 +70,7 @@
       <button
         class="rounded border px-2.5 py-1 text-xs transition {schemeId === s.id
           ? 'border-zinc-900 bg-zinc-900 text-white'
-          : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}"
+          : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
         onclick={() => (schemeId = s.id)}
       >
         {s.name}
@@ -83,7 +83,7 @@
     type="text"
     bind:value={query}
     placeholder="例如：降维打击"
-    class="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+    class="block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
   />
 
   <!-- Query analysis breadcrumb -->
@@ -92,7 +92,7 @@
       <span class="text-zinc-500">韵母模式：</span>
       {#each querySyllables as s, i (i)}
         <span
-          class="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-zinc-700"
+          class="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300"
           title="{s.char} · {s.pinyinWithTone} · {queryKeys[i] || '?'}"
         >
           <span class="font-sans text-sm">{s.char}</span>
@@ -114,11 +114,11 @@
   <!-- Results -->
   <section class="mt-6">
     {#if !result || result.totalHits === 0}
-      <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-6 text-center">
+      <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center">
         {#if querySyllables.length === 0}
           <p class="text-sm text-zinc-500">输入一个中文词组试试。</p>
         {:else}
-          <p class="text-sm text-zinc-700">
+          <p class="text-sm text-zinc-700 dark:text-zinc-300">
             没有找到等长的押韵候选 — 词库还小，等正式数据进来会好很多。
           </p>
           <p class="mt-1 text-xs text-zinc-500">
@@ -127,16 +127,16 @@
         {/if}
       </div>
     {:else}
-      <p class="mb-4 text-sm text-zinc-600">
-        共 <span class="font-semibold text-zinc-900">{result.totalHits}</span>
+      <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+        共 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{result.totalHits}</span>
         条候选，按宽松级别分层（Level 0 = 全严格匹配；Level k = 第 k 位放宽）：
       </p>
 
       <div class="space-y-4">
         {#each result.buckets as bucket (bucket.level)}
-          <div class="rounded-lg border border-zinc-200 bg-white p-4">
+          <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
-              <p class="font-semibold text-zinc-800">
+              <p class="font-semibold text-zinc-800 dark:text-zinc-200">
                 Level {bucket.level}
                 <span class="ml-2 font-normal text-zinc-500">
                   {#if bucket.level === 0}
@@ -153,9 +153,9 @@
 
             <ul class="space-y-2">
               {#each bucket.hits as hit (hit.phrase.text)}
-                <li class="rounded border border-zinc-100 p-3">
+                <li class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
                   <div class="mb-1.5 flex items-baseline justify-between">
-                    <span class="text-base font-semibold text-zinc-900">
+                    <span class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                       {hit.phrase.text}
                     </span>
                     <span class="font-mono text-xs text-zinc-400">
@@ -187,15 +187,15 @@
     {/if}
   </section>
 
-  <footer class="mt-12 border-t border-zinc-200 pt-6 text-sm text-zinc-500">
+  <footer class="mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
-      <a href="{base}/" class="text-zinc-700 underline hover:text-zinc-900">主页</a>
+      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">主页</a>
       ·
-      <a href="{base}/analyze" class="text-zinc-700 underline hover:text-zinc-900">反向分析</a>
+      <a href="{base}/analyze" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">反向分析</a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
-        class="text-zinc-700 underline hover:text-zinc-900"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
       >
         GitHub
       </a>

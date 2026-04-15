@@ -1,6 +1,7 @@
 <script lang="ts">
   import { base } from '$app/paths';
   import { page } from '$app/stores';
+  import ThemeToggle from './ThemeToggle.svelte';
 
   // Static nav entries. `href` is relative to `$app/paths.base` (set by
   // svelte.config.js to '/chinese-rhyme-finder' in production).
@@ -22,11 +23,11 @@
   }
 </script>
 
-<nav class="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur">
+<nav class="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
   <div class="mx-auto flex max-w-4xl items-center justify-between gap-3 px-6 py-3">
     <a
       href="{base}/"
-      class="font-mono text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900"
+      class="font-mono text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
     >
       chinese-rhyme-finder
     </a>
@@ -36,8 +37,8 @@
           <a
             href="{base}{link.href}"
             class="rounded px-2.5 py-1.5 transition {isActive(link.href)
-              ? 'bg-zinc-900 text-white'
-              : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'}"
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+              : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'}"
           >
             <span aria-hidden="true">{link.emoji}</span>
             <span class="ml-1">{link.label}</span>
@@ -47,13 +48,16 @@
       <li class="ml-1 hidden sm:block">
         <a
           href="https://github.com/QianyangPeng/chinese-rhyme-finder"
-          class="rounded px-2.5 py-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+          class="rounded px-2.5 py-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           target="_blank"
           rel="noopener"
           aria-label="GitHub"
         >
           GitHub
         </a>
+      </li>
+      <li>
+        <ThemeToggle />
       </li>
     </ul>
   </div>

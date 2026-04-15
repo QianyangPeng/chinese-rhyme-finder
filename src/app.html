@@ -8,11 +8,26 @@
       name="description"
       content="中文多音节押韵发现工具 · 主动推送巧妙的押韵组合，启发创作"
     />
+    <script>
+      // Applied BEFORE hydration so the page doesn't flash light before
+      // flipping to dark. Reads localStorage first, falls back to OS pref.
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var wantsDark =
+            saved === 'dark' ||
+            (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (wantsDark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* localStorage blocked — default to light */
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body
     data-sveltekit-preload-data="hover"
-    class="bg-zinc-50 text-zinc-900 antialiased"
+    class="bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100"
   >
     <div style="display: contents">%sveltekit.body%</div>
   </body>

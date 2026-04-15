@@ -42,10 +42,10 @@
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-10">
-    <h1 class="text-4xl font-bold tracking-tight text-zinc-900">
+    <h1 class="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
       中文押韵发现
     </h1>
-    <p class="mt-3 text-lg text-zinc-600">不是字典，是灵感引擎。</p>
+    <p class="mt-3 text-lg text-zinc-600 dark:text-zinc-400">不是字典，是灵感引擎。</p>
   </header>
 
   <!-- Status banner -->
@@ -53,7 +53,7 @@
     <p class="font-mono text-xs uppercase tracking-wider text-emerald-700">
       Status · Phase 1 MVP 闭环
     </p>
-    <p class="mt-2 text-sm text-zinc-700">
+    <p class="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
       四个模式都跑通了：
       <a href="{base}/discover" class="font-semibold text-emerald-800 underline">Discover</a> ·
       <a href="{base}/search" class="font-semibold text-emerald-800 underline">Search</a> ·
@@ -64,8 +64,8 @@
 
   <!-- Live engine demo -->
   <section class="mb-12">
-    <h2 class="mb-1 text-2xl font-semibold text-zinc-900">引擎实测</h2>
-    <p class="mb-4 text-sm text-zinc-600">
+    <h2 class="mb-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">引擎实测</h2>
+    <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
       输入两个词组，看引擎按音节拆韵母、按 3 个 scheme 判断押韵。
     </p>
 
@@ -73,25 +73,25 @@
     <div class="mb-4 flex flex-wrap gap-2 text-xs">
       <span class="text-zinc-500">试试：</span>
       <button
-        class="rounded border border-zinc-300 bg-white px-2 py-1 hover:bg-zinc-50"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => presetExample('姜维的戏', '降维打击')}
       >
         姜维的戏 / 降维打击
       </button>
       <button
-        class="rounded border border-zinc-300 bg-white px-2 py-1 hover:bg-zinc-50"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => presetExample('星辰大海', '银河大队')}
       >
         星辰大海 / 银河大队
       </button>
       <button
-        class="rounded border border-zinc-300 bg-white px-2 py-1 hover:bg-zinc-50"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => presetExample('原神芭芭拉', '哈哈哈哈哈')}
       >
         原神芭芭拉 / 哈哈哈哈哈
       </button>
       <button
-        class="rounded border border-zinc-300 bg-white px-2 py-1 hover:bg-zinc-50"
+        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => presetExample('北京欢迎你', '南京见面礼')}
       >
         北京欢迎你 / 南京见面礼
@@ -105,7 +105,7 @@
           type="text"
           bind:value={phraseA}
           placeholder="输入一个中文短语"
-          class="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
         />
       </label>
       <label class="block">
@@ -114,7 +114,7 @@
           type="text"
           bind:value={phraseB}
           placeholder="输入另一个中文短语对比"
-          class="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
         />
       </label>
     </div>
@@ -122,7 +122,7 @@
     <!-- Per-phrase syllable breakdown -->
     <div class="mt-6 grid gap-4 sm:grid-cols-2">
       {#each [{ label: 'A', sylls: sylsA }, { label: 'B', sylls: sylsB }] as col (col.label)}
-        <div class="rounded-lg border border-zinc-200 bg-white p-4">
+        <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <p class="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-500">
             {col.label} · {col.sylls.length} 音节
           </p>
@@ -131,7 +131,7 @@
           {:else}
             <table class="w-full text-sm">
               <thead>
-                <tr class="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left text-xs text-zinc-500">
                   <th class="py-1">字</th>
                   <th class="py-1">拼音</th>
                   <th class="py-1">韵母</th>
@@ -140,15 +140,15 @@
               </thead>
               <tbody>
                 {#each col.sylls as s, i (i)}
-                  <tr class="border-b border-zinc-100 last:border-0">
+                  <tr class="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
                     <td class="py-1.5 text-base">{s.char}</td>
-                    <td class="py-1.5 font-mono text-zinc-700">
+                    <td class="py-1.5 font-mono text-zinc-700 dark:text-zinc-300">
                       {s.pinyinWithTone}
                     </td>
-                    <td class="py-1.5 font-mono font-semibold text-zinc-900">
+                    <td class="py-1.5 font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                       {s.final}
                     </td>
-                    <td class="py-1.5 text-zinc-600">
+                    <td class="py-1.5 text-zinc-600 dark:text-zinc-400">
                       {ALL_SCHEMES[1].keyOf(s.final) || '—'}
                     </td>
                   </tr>
@@ -161,7 +161,7 @@
     </div>
 
     <!-- Cross-scheme comparison -->
-    <div class="mt-6 rounded-lg border border-zinc-200 bg-white p-4">
+    <div class="mt-6 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
       <p class="mb-3 font-mono text-xs uppercase tracking-wider text-zinc-500">
         押韵对比
       </p>
@@ -176,7 +176,7 @@
       {:else}
         <div class="space-y-3">
           {#each comparisons as { scheme, match, keysA, keysB } (scheme.id)}
-            <div class="rounded border border-zinc-100 p-3">
+            <div class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
               <div class="flex items-baseline justify-between">
                 <p class="text-sm font-semibold text-zinc-800">{scheme.name}</p>
                 {#if match}
@@ -229,12 +229,12 @@
 
   <!-- Modes overview (kept short) -->
   <section class="mb-10">
-    <h2 class="mb-3 text-xl font-semibold text-zinc-900">三种模式</h2>
-    <ul class="space-y-2 text-sm text-zinc-700">
+    <h2 class="mb-3 text-xl font-semibold text-zinc-900 dark:text-zinc-100">三种模式</h2>
+    <ul class="space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
       <li>
         <a
           href="{base}/discover"
-          class="font-semibold text-zinc-900 underline hover:text-zinc-700"
+          class="font-semibold text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:text-zinc-300"
         >
           🔥 Discover →
         </a>
@@ -244,7 +244,7 @@
       <li>
         <a
           href="{base}/search"
-          class="font-semibold text-zinc-900 underline hover:text-zinc-700"
+          class="font-semibold text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:text-zinc-300"
         >
           🔍 Search →
         </a>
@@ -254,7 +254,7 @@
       <li>
         <a
           href="{base}/analyze"
-          class="font-semibold text-zinc-900 underline hover:text-zinc-700"
+          class="font-semibold text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:text-zinc-300"
         >
           📖 Analyze →
         </a>
@@ -264,25 +264,25 @@
     </ul>
   </section>
 
-  <footer class="mt-10 border-t border-zinc-200 pt-6 text-sm text-zinc-500">
+  <footer class="mt-10 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
-        class="text-zinc-700 underline hover:text-zinc-900"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
       >
         GitHub
       </a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder/blob/main/docs/DECISIONS.md"
-        class="text-zinc-700 underline hover:text-zinc-900"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
       >
         设计决策
       </a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder/blob/main/docs/ROADMAP.md"
-        class="text-zinc-700 underline hover:text-zinc-900"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
       >
         路线图
       </a>
