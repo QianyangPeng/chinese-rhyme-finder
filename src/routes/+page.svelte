@@ -1,8 +1,20 @@
 <script lang="ts">
   import { parseSyllables } from '$lib/core/pinyin';
-  import { ALL_SCHEMES, matchFull } from '$lib/core/rhyme';
+  import { ALL_SCHEMES, matchFull, shisanzheScheme } from '$lib/core/rhyme';
   import type { Syllable } from '$lib/core/pinyin';
+  import { getDefaultLexicon } from '$lib/core/corpus';
+  import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
+
+  // Live engine stats — computed once at module load so the home page
+  // reflects the current lexicon without the user having to hunt for it.
+  const _lex = getDefaultLexicon();
+  const _clusterCat = mineClusters(_lex, shisanzheScheme);
+  const STATS = {
+    phrases: _lex.phrases.length,
+    clusters: _clusterCat.clusters.length,
+    schemes: ALL_SCHEMES.length
+  };
 
   // Two phrases to analyze. Defaults are the canonical Capper example
   // ("姜维的戏" vs "降维打击") that motivated the whole project — they show
@@ -41,12 +53,32 @@
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
-  <header class="mb-10">
+  <header class="mb-8">
     <h1 class="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
       中文押韵发现
     </h1>
     <p class="mt-3 text-lg text-zinc-600 dark:text-zinc-400">不是字典，是灵感引擎。</p>
   </header>
+
+  <!-- Live stats row — quick signal of how alive the lexicon is right now. -->
+  <section class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">词条</p>
+      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.phrases}</p>
+    </div>
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">押韵 cluster</p>
+      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.clusters}</p>
+    </div>
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">押韵 scheme</p>
+      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.schemes}</p>
+    </div>
+    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
+      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">单元测试</p>
+      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">126</p>
+    </div>
+  </section>
 
   <!-- Status banner -->
   <section class="mb-8 rounded-lg border border-emerald-200 bg-emerald-50 p-5">
