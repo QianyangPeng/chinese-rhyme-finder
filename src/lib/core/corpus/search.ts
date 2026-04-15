@@ -10,7 +10,7 @@
 
 import type { Lexicon, PhraseRecord } from './types.js';
 import type { RhymeScheme } from '../rhyme/types.js';
-import { matchFull, type RhymeMatch } from '../rhyme/matcher.js';
+import { matchFull, matchTail, type RhymeMatch } from '../rhyme/matcher.js';
 
 export interface SearchHit {
   /** The matched phrase. */
@@ -112,4 +112,116 @@ export function searchByFinals(
     buckets: out,
     totalHits
   };
+}
+
+// ─── Tail-aligned search ───────────────────────────────────────────────
+
+export interface TailSearchHit {
+  readonly phrase: PhraseRecord;
+  /** Length of the matching tail. Higher = deeper multi-押. */
+  readonly tailK: number;
+  /** Full match info for the matching window. */
+  readonly match: RhymeMatch;
+}
+
+export interface TailSearchBucket {
+  /** Depth of tail rhyme common to all hits in this bucket. */
+  readonly tailK: number;
+  readonly hits: readonly TailSearchHit[];
+}
+
+export interface TailSearchResult {
+  readonly targetLength: number;
+  /** Buckets in DESCENDING tailK order — deepest matches shown first. */
+  readonly buckets: readonly TailSearchBucket[];
+  readonly totalHits: number;
+}
+
+export interface TailSearchOptions {
+  /** Don't return hits with tailK below this. Default 2 (single-syllable
+   *  matches are usually noise — half the lexicon shares the last syllable). */
+  readonly minTailK?: number;
+  /** Cap hits per bucket. Default 30. */
+  readonly maxPerBucket?: number;
+  readonly excludeText?: string;
+}
+
+const TAIL_DEFAULT_MIN_K = 2;
+const TAIL_DEFAULT_MAX_PER_BUCKET = 30;
+
+/**
+ * Find phrases that share a tail rhyme of length ≥ minTailK with the
+ * target, regardless of phrase length. This is the practical complement
+ * to `searchByFinals`: rappers often want to extend a line with a
+ * different-length phrase that just shares the ending.
+ *
+ * Algorithm walks the whole lexicon once; O(P × maxPatternScan) where
+ * maxPatternScan = min(target.length, candidate.length). For small
+ * corpora (≤50k) this is milliseconds.
+ */
+export function searchByTail(
+  target: readonly string[],
+  scheme: RhymeScheme,
+  lexicon: Lexicon,
+  options: TailSearchOptions = {}
+): TailSearchResult {
+  const minTailK = options.minTailK ?? TAIL_DEFAULT_MIN_K;
+  const maxPerBucket = options.maxPerBucket ?? TAIL_DEFAULT_MAX_PER_BUCKET;
+  const excludeText = options.excludeText;
+  const targetLength = target.length;
+
+  if (targetLength === 0) {
+    return { targetLength: 0, buckets: [], totalHits: 0 };
+  }
+
+  // Work out the longest possible tail K for this target under the scheme.
+  // We cap the bucket keyspace at the target length.
+  const buckets: Array<TailSearchHit[]> = Array.from(
+    { length: targetLength + 1 },
+    () => []
+  );
+
+  for (const phrase of lexicon.phrases) {
+    if (excludeText !== undefined && phrase.text === excludeText) continue;
+    // Try the deepest possible match first; if it fully matches we stop.
+    // Otherwise we record the match at its actual relaxationLevel=0 window.
+    const window = Math.min(targetLength, phrase.length);
+    let bestK = 0;
+    let bestMatch: RhymeMatch | null = null;
+    // Start wide and shrink so the first success is the deepest.
+    for (let k = window; k >= minTailK; k--) {
+      const m = matchTail(target, phrase.finals, scheme, k);
+      if (m.isFullMatch && m.comparedLength === k) {
+        bestK = k;
+        bestMatch = m;
+        break;
+      }
+    }
+    if (bestMatch && bestK >= minTailK) {
+      buckets[bestK].push({
+        phrase,
+        tailK: bestK,
+        match: bestMatch
+      });
+    }
+  }
+
+  const out: TailSearchBucket[] = [];
+  let totalHits = 0;
+  // Descending tailK order — user cares about the deepest first.
+  for (let k = buckets.length - 1; k >= minTailK; k--) {
+    const bucket = buckets[k];
+    if (bucket.length === 0) continue;
+    bucket.sort((a, b) => {
+      if (b.phrase.quality !== a.phrase.quality) {
+        return b.phrase.quality - a.phrase.quality;
+      }
+      return a.phrase.text.localeCompare(b.phrase.text, 'zh-Hans');
+    });
+    const trimmed = bucket.slice(0, maxPerBucket);
+    totalHits += trimmed.length;
+    out.push({ tailK: k, hits: trimmed });
+  }
+
+  return { targetLength, buckets: out, totalHits };
 }

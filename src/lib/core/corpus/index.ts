@@ -6,8 +6,13 @@ export { SEED_PHRASES } from './seed-data.js';
 export { buildLexicon, getDefaultLexicon } from './loader.js';
 export {
   searchByFinals,
+  searchByTail,
   type SearchHit,
   type SearchBucket,
   type SearchResult,
-  type SearchOptions
+  type SearchOptions,
+  type TailSearchHit,
+  type TailSearchBucket,
+  type TailSearchResult,
+  type TailSearchOptions
 } from './search.js';

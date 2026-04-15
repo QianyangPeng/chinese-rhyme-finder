@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildLexicon } from './loader.js';
-import { searchByFinals } from './search.js';
+import { searchByFinals, searchByTail } from './search.js';
 import { strictScheme, shisanzheScheme } from '../rhyme/schemes/index.js';
 import { extractFinals } from '../pinyin/parser.js';
 
@@ -94,6 +94,61 @@ describe('searchByFinals · graded relaxation', () => {
     for (const bucket of r.buckets) {
       expect(bucket.level).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('searchByTail', () => {
+  it('returns buckets in DESCENDING tailK order', () => {
+    const target = extractFinals('降维打击');
+    const r = searchByTail(target, shisanzheScheme, lex, { excludeText: '降维打击' });
+    const ks = r.buckets.map((b) => b.tailK);
+    const sortedDesc = [...ks].sort((a, b) => b - a);
+    expect(ks).toEqual(sortedDesc);
+  });
+
+  it('finds different-length candidates that share a tail', () => {
+    const target = extractFinals('降维打击'); // 4 syllables
+    const r = searchByTail(target, shisanzheScheme, lex, {
+      minTailK: 2,
+      excludeText: '降维打击'
+    });
+    const allLengths = new Set(
+      r.buckets.flatMap((b) => b.hits.map((h) => h.phrase.length))
+    );
+    // Seed has 2,3,4,5-syllable phrases; tail search should bring some
+    // non-4-length matches through when the tail rhymes.
+    expect(allLengths.size).toBeGreaterThan(1);
+  });
+
+  it('respects minTailK', () => {
+    const target = extractFinals('降维打击');
+    const r = searchByTail(target, shisanzheScheme, lex, { minTailK: 3 });
+    for (const b of r.buckets) {
+      expect(b.tailK).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('respects maxPerBucket', () => {
+    const target = extractFinals('降维打击');
+    const r = searchByTail(target, shisanzheScheme, lex, { maxPerBucket: 2 });
+    for (const b of r.buckets) {
+      expect(b.hits.length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('every hit reports isFullMatch on its match window', () => {
+    const target = extractFinals('降维打击');
+    const r = searchByTail(target, shisanzheScheme, lex, { minTailK: 2 });
+    for (const b of r.buckets) {
+      for (const h of b.hits) {
+        expect(h.match.isFullMatch).toBe(true);
+        expect(h.match.comparedLength).toBe(h.tailK);
+      }
+    }
+  });
+
+  it('empty target returns no buckets', () => {
+    expect(searchByTail([], shisanzheScheme, lex).totalHits).toBe(0);
   });
 });
 

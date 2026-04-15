@@ -2,7 +2,8 @@
   import { parseSyllables } from '$lib/core/pinyin';
   import { ALL_SCHEMES, getScheme } from '$lib/core/rhyme';
   import type { RhymeSchemeId } from '$lib/core/rhyme';
-  import { getDefaultLexicon, searchByFinals } from '$lib/core/corpus';
+  import { getDefaultLexicon, searchByFinals, searchByTail } from '$lib/core/corpus';
+  type SearchMode = 'full' | 'tail';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
 
@@ -10,14 +11,17 @@
   // prerender doesn't choke on searchParams access.
   let query = $state('降维打击');
   let schemeId = $state<RhymeSchemeId>('shisanzhe');
+  let mode = $state<SearchMode>('full');
   let urlReady = $state(false);
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('q');
     const s = params.get('scheme');
+    const m = params.get('mode');
     if (q) query = q;
     if (s === 'strict' || s === 'shisanzhe' || s === 'loose') schemeId = s;
+    if (m === 'tail') mode = 'tail';
     urlReady = true;
   });
 
@@ -28,6 +32,7 @@
     const params = new URLSearchParams();
     if (query.trim()) params.set('q', query.trim());
     if (schemeId !== 'shisanzhe') params.set('scheme', schemeId);
+    if (mode !== 'full') params.set('mode', mode);
     const qs = params.toString();
     const url = `${base}/search/${qs ? '?' + qs : ''}`;
     if (window.location.pathname + window.location.search !== url) {
@@ -53,13 +58,27 @@
   const queryFinals = $derived(querySyllables.map((s) => s.final));
   const queryKeys = $derived(querySyllables.map((s) => scheme.keyOf(s.final)));
 
-  const result = $derived(
-    queryFinals.length > 0
+  const fullResult = $derived(
+    mode === 'full' && queryFinals.length > 0
       ? searchByFinals(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
           maxPerBucket: 30
         })
       : null
+  );
+
+  const tailResult = $derived(
+    mode === 'tail' && queryFinals.length > 0
+      ? searchByTail(queryFinals, scheme, lexicon, {
+          excludeText: query.trim(),
+          minTailK: 2,
+          maxPerBucket: 30
+        })
+      : null
+  );
+
+  const totalHits = $derived(
+    mode === 'full' ? fullResult?.totalHits ?? 0 : tailResult?.totalHits ?? 0
   );
 
   function presetExample(q: string) {
@@ -159,33 +178,38 @@
   <!-- Lexicon badge -->
   <p class="mt-3 text-xs text-zinc-500">
     词库：内置 <span class="font-mono">{lexicon.phrases.length}</span> 条 ·
-    <span class="font-mono">{lexicon.byLength.get(queryFinals.length)?.length ?? 0}</span>
-    条等长候选 · 一旦 P1.4 数据管道完成将自动扩到 50k+
+    {#if mode === 'full'}
+      <span class="font-mono">{lexicon.byLength.get(queryFinals.length)?.length ?? 0}</span>
+      条等长候选
+    {:else}
+      尾押模式不限长度
+    {/if}
+    · 一旦 P1.4 数据管道完成将自动扩到 50k+
   </p>
 
   <!-- Results -->
   <section class="mt-6">
-    {#if !result || result.totalHits === 0}
+    {#if totalHits === 0}
       <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center">
         {#if querySyllables.length === 0}
           <p class="text-sm text-zinc-500">输入一个中文词组试试。</p>
         {:else}
           <p class="text-sm text-zinc-700 dark:text-zinc-300">
-            没有找到等长的押韵候选 — 词库还小，等正式数据进来会好很多。
+            没有找到押韵候选 — 词库还小，等正式数据进来会好很多。
           </p>
           <p class="mt-1 text-xs text-zinc-500">
-            提示：试试其他常见短语，或切换更宽松的 scheme（宽松邻韵）。
+            提示：试试宽松邻韵 scheme，或切到尾押模式看更多候选。
           </p>
         {/if}
       </div>
-    {:else}
+    {:else if mode === 'full' && fullResult}
       <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        共 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{result.totalHits}</span>
+        共 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{fullResult.totalHits}</span>
         条候选，按宽松级别分层（Level 0 = 全严格匹配；Level k = 第 k 位放宽）：
       </p>
 
       <div class="space-y-4">
-        {#each result.buckets as bucket (bucket.level)}
+        {#each fullResult.buckets as bucket (bucket.level)}
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
               <p class="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -220,6 +244,59 @@
                         class="rounded px-1.5 py-0.5 {hit.match.perPosition[i]
                           ? 'bg-emerald-100 text-emerald-900'
                           : 'bg-rose-100 text-rose-900'}"
+                      >
+                        {f}
+                      </span>
+                    {/each}
+                    {#if hit.phrase.tags.length > 0}
+                      <span class="ml-auto text-zinc-400">
+                        {hit.phrase.tags.map((t) => `#${t}`).join(' ')}
+                      </span>
+                    {/if}
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/each}
+      </div>
+    {:else if mode === 'tail' && tailResult}
+      <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+        共 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{tailResult.totalHits}</span>
+        条候选，按尾押深度排序（K 越大，末尾押得越深）：
+      </p>
+
+      <div class="space-y-4">
+        {#each tailResult.buckets as bucket (bucket.tailK)}
+          <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+            <div class="mb-3 flex items-baseline justify-between">
+              <p class="font-semibold text-zinc-800 dark:text-zinc-200">
+                {bucket.tailK} 押
+                <span class="ml-2 font-normal text-zinc-500">末尾 {bucket.tailK} 个音节完全押</span>
+              </p>
+              <span class="font-mono text-xs text-zinc-500">
+                {bucket.hits.length} 条
+              </span>
+            </div>
+
+            <ul class="space-y-2">
+              {#each bucket.hits as hit (hit.phrase.text)}
+                <li class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
+                  <div class="mb-1.5 flex items-baseline justify-between">
+                    <span class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                      {hit.phrase.text}
+                    </span>
+                    <span class="font-mono text-xs text-zinc-400">
+                      {hit.phrase.length} 音节
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1 font-mono text-xs">
+                    {#each hit.phrase.finals as f, i (i)}
+                      {@const inTail = i >= hit.phrase.finals.length - hit.tailK}
+                      <span
+                        class="rounded px-1.5 py-0.5 {inTail
+                          ? 'bg-emerald-100 text-emerald-900'
+                          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}"
                       >
                         {f}
                       </span>
