@@ -5,7 +5,7 @@
     getCurrentLexicon,
     ensureExtendedLexicon
   } from '$lib/core/corpus';
-  import type { Lexicon } from '$lib/core/corpus';
+  import type { Lexicon, PhraseRecord } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
@@ -71,9 +71,19 @@
   let minMembers = $state(3);
   let tailOnly = $state(true);
   let lens = $state<Lens>('featured');
+  // Default-hide 唐诗/宋词/歇后语: they dominate the non-idiom slice at
+  // 4+ 押 without being rap-relevant. User can toggle on for classical
+  // discovery. The 'poetry' lens always shows classical regardless.
+  let includeClassical = $state(false);
   let urlReady = $state(false);
   let lexicon = $state<Lexicon>(getCurrentLexicon());
   let extendedLoading = $state(false);
+
+  const CLASSICAL_SOURCES = new Set([
+    'chinese-poetry/tang',
+    'chinese-poetry/song',
+    'xinhua-xiehouyu'
+  ]);
 
   // URL-based state overrides applied only after mount to avoid touching
   // searchParams during SvelteKit's build-time prerender.
@@ -98,6 +108,7 @@
     ) {
       lens = lensParam;
     }
+    if (params.get('classical') === '1') includeClassical = true;
     urlReady = true;
 
     // If not already loaded, show a loading hint and swap in when ready.
@@ -122,6 +133,7 @@
     if (minMembers !== 3) qp.set('members', String(minMembers));
     if (!tailOnly) qp.set('tail', 'all');
     if (lens !== 'featured') qp.set('lens', lens);
+    if (includeClassical) qp.set('classical', '1');
     const qs = qp.toString();
     const url = `${base}/discover/${qs ? '?' + qs : ''}`;
     if (window.location.pathname + window.location.search !== url) {
@@ -131,6 +143,36 @@
 
   const scheme = strictScheme; // UI exposes only 严式
 
+  /** Build a derivative Lexicon that excludes 唐诗/宋词/歇后语 sources.
+   *  Memoized by source-lexicon identity so toggling `includeClassical`
+   *  on/off doesn't invalidate the miner's bucket cache — each lexicon
+   *  object survives and is reused. */
+  const _filteredCache = new WeakMap<Lexicon, Lexicon>();
+  function getNonClassicalLexicon(full: Lexicon): Lexicon {
+    const cached = _filteredCache.get(full);
+    if (cached) return cached;
+    const phrases = full.phrases.filter((p) => !CLASSICAL_SOURCES.has(p.source));
+    const byLength = new Map<number, number[]>();
+    for (let id = 0; id < phrases.length; id++) {
+      const L = phrases[id].length;
+      let bucket = byLength.get(L);
+      if (!bucket) {
+        bucket = [];
+        byLength.set(L, bucket);
+      }
+      bucket.push(id);
+    }
+    const out: Lexicon = { phrases, byLength };
+    _filteredCache.set(full, out);
+    return out;
+  }
+
+  // The 'poetry' lens always shows classical content; everything else
+  // respects includeClassical (default off).
+  const activeLexicon = $derived(
+    lens === 'poetry' || includeClassical ? lexicon : getNonClassicalLexicon(lexicon)
+  );
+
   // Mine a generous batch of clusters. Bucket cache is keyed by
   // (lexicon, scheme.id, toneMode, tailOnly) so flipping tone or filters
   // stays cheap. Cap raised from 2000 → 8000 so lens-specific filters
@@ -138,7 +180,7 @@
   // the miner's cleverness ranker heavily favors tag-diverse clusters,
   // which systematically pushes pure-register clusters below 2000.
   const rawCatalog = $derived(
-    mineClusters(lexicon, scheme, {
+    mineClusters(activeLexicon, scheme, {
       minPatternLength: minDepth,
       minMembers,
       tailOnly,
@@ -168,6 +210,54 @@
   /** All member sources for a cluster — used by poetry/modern lens filters. */
   function memberSources(cluster: (typeof rawCatalog.clusters)[number]): string[] {
     return cluster.members.map((m) => rawCatalog.lexiconRef[m.phraseId].source);
+  }
+
+  /**
+   * Collapse "template-filler" duplication inside a cluster. When a cluster
+   * has many members that share the same FIRST word + POS sequence (e.g.
+   * `什么意思 / 什么关系 / 什么感觉 / 什么玩意` — all `r + n` starting with
+   * `什么`), they're not discovery — they're just slot-fillers of one
+   * attested template. Keep at most `maxPerGroup` per (first-word, POS-seq)
+   * bucket, preferring higher quality.
+   *
+   * Clusters with diverse first-words (`星辰大海 / 古道西风 / 江山万里`) are
+   * untouched because each member is its own group of size 1.
+   */
+  function stemDedupe(
+    members: readonly { phraseId: number; tailOffset: number }[],
+    lexiconRef: readonly PhraseRecord[],
+    maxPerGroup = 2
+  ): { visible: typeof members; collapsed: number } {
+    const groups = new Map<string, { phraseId: number; tailOffset: number }[]>();
+    for (const m of members) {
+      const phrase = lexiconRef[m.phraseId];
+      const firstSeg = phrase.segments?.[0]?.text ?? [...phrase.text][0] ?? '';
+      const pos = phrase.segments?.map((s) => s.pos).join('|') ?? 'nosegs';
+      const key = `${firstSeg}::${pos}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = [];
+        groups.set(key, g);
+      }
+      g.push(m);
+    }
+    const hidden = new Set<number>();
+    for (const group of groups.values()) {
+      if (group.length <= maxPerGroup) continue;
+      const sorted = [...group].sort(
+        (a, b) => lexiconRef[b.phraseId].quality - lexiconRef[a.phraseId].quality
+      );
+      for (let i = maxPerGroup; i < sorted.length; i++) {
+        hidden.add(sorted[i].phraseId);
+      }
+    }
+    if (hidden.size === 0) {
+      return { visible: members, collapsed: 0 };
+    }
+    return {
+      visible: members.filter((m) => !hidden.has(m.phraseId)),
+      collapsed: hidden.size
+    };
   }
 
   const catalog = $derived(
@@ -400,6 +490,29 @@
     </div>
   </div>
 
+  <!-- Source toggle: classical sources (唐诗/宋词/歇后语) dominate non-
+       idiom slices at 4+押 without being rap-relevant; default off. -->
+  <div class="mb-4 flex flex-wrap items-center gap-2 text-xs">
+    <label
+      class="inline-flex cursor-pointer items-center gap-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 select-none hover:bg-zinc-50 dark:hover:bg-zinc-800"
+      title="默认关闭：唐诗/宋词/歇后语对 rap 不太有用，占位太多。打开后所有 lens（诗词 lens 除外）都会把它们算进来。"
+    >
+      <input
+        type="checkbox"
+        class="h-3 w-3 accent-zinc-900 dark:accent-zinc-100"
+        checked={includeClassical}
+        onchange={(e) => (includeClassical = (e.currentTarget as HTMLInputElement).checked)}
+        disabled={lens === 'poetry'}
+      />
+      <span class="text-zinc-700 dark:text-zinc-300">
+        含唐诗/宋词/歇后语
+      </span>
+      {#if lens === 'poetry'}
+        <span class="text-zinc-400">（诗词 lens 自动启用）</span>
+      {/if}
+    </label>
+  </div>
+
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
     找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{catalog.clusters.length}</span> 组 cluster
   </p>
@@ -416,6 +529,7 @@
   {:else}
     <div class="space-y-3">
       {#each catalog.clusters as cluster (cluster.id)}
+        {@const deduped = stemDedupe(cluster.members, catalog.lexiconRef)}
         <article class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <header class="mb-3 flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
@@ -432,7 +546,7 @@
               <p class="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-zinc-500">
                 <span>{cluster.patternLength} 押</span>
                 <span>·</span>
-                <span>{cluster.members.length} 成员</span>
+                <span>{cluster.members.length} 成员{deduped.collapsed > 0 ? ` (折叠 ${deduped.collapsed})` : ''}</span>
                 <span>·</span>
                 <span class="text-amber-500">{stars(cluster.cleverness)}</span>
                 <span class="font-mono">{cluster.cleverness.toFixed(2)}</span>
@@ -473,7 +587,7 @@
           </header>
 
           <ul class="flex flex-wrap gap-2">
-            {#each cluster.members as m (m.phraseId)}
+            {#each deduped.visible as m (m.phraseId)}
               {@const phrase = catalog.lexiconRef[m.phraseId]}
               {@const chars = [...phrase.text]}
               {@const matchStart = phrase.length - cluster.patternLength - m.tailOffset}
@@ -527,6 +641,11 @@
                 {/if}
               </li>
             {/each}
+            {#if deduped.collapsed > 0}
+              <li class="flex items-center px-2 py-1 text-xs italic text-zinc-400 dark:text-zinc-500">
+                + {deduped.collapsed} 条同根模板已折叠（首词+词性相同的变体）
+              </li>
+            {/if}
           </ul>
         </article>
       {/each}
