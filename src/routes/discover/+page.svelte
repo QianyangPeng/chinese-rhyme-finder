@@ -306,7 +306,7 @@
     miningInProgress = true;
 
     if (defaultConfig) {
-      const file = `${base}/data/clusters/depth-1-tone-${tone}.json`;
+      const file = `${base}/data/clusters/tone-${tone}.json`;
       fetch(file)
         .then((r) => r.ok ? r.json() : Promise.reject('not found'))
         .then((data) => {

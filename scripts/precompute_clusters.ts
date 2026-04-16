@@ -133,62 +133,91 @@ function stemDedupe(
 const lexicon = loadLexicon();
 mkdirSync(OUT_DIR, { recursive: true });
 
+// Per-depth cluster quota. Mine each depth separately so 双押 doesn't
+// get squeezed out by 四押 (which has higher cleverness due to depth bonus).
+const PER_DEPTH_MAX = 2000;
+
 let fileCount = 0;
-for (const depth of DEPTHS) {
-  for (const toneMode of TONE_MODES) {
+for (const toneMode of TONE_MODES) {
+  // Mine each depth independently to guarantee fair representation.
+  const allProcessed: Array<{cluster: any; deduped: any}> = [];
+
+  for (let d = 1; d <= 8; d++) {
+    // Mine with a large maxClusters to ensure depth-d clusters survive
+    // the cleverness sort. Depth-d clusters may rank low globally but
+    // we filter to exact depth afterward, so we need enough headroom.
     const catalog = mineClusters(lexicon, strictScheme, {
-      minPatternLength: depth,
+      minPatternLength: d,
       minMembers: MIN_MEMBERS,
       tailOnly: true,
       toneMode,
-      maxClusters: MAX_CLUSTERS,
+      maxClusters: 50000,
     });
 
-    // No truncation — include ALL clusters that survive stemDedupe +
-    // minMembers. Infinite scroll handles rendering. File size is
-    // bounded by maxClusters in the miner (8000).
-    const processed = catalog.clusters
+    // Only keep clusters of exactly this depth, then take top N.
+    // 2-push clusters can be huge (100+ members each in tone-none),
+    // limit to 200 to keep file size manageable.
+    const depthCap = d <= 2 ? 200 : PER_DEPTH_MAX;
+    const exactDepth = catalog.clusters
+      .filter(c => c.patternLength === d)
+      .slice(0, depthCap);
+
+    const processed = exactDepth
       .map(cluster => {
         const deduped = stemDedupe(cluster.members, lexicon.phrases, cluster.patternLength);
         return { cluster, deduped };
       })
       .filter(({ deduped }) => deduped.visible.length >= MIN_MEMBERS);
 
-    // Denormalize: embed full phrase data in each member so browser
-    // doesn't need the lexicon to render Discover.
-    const output = {
-      config: { depth, toneMode, sources: [...DEFAULT_SOURCES] },
-      totalPhrases: lexicon.phrases.length,
-      clusters: processed.map(({ cluster, deduped }) => ({
-        id: cluster.id,
-        pattern: cluster.pattern,
-        patternLength: cluster.patternLength,
-        cleverness: Math.round(cluster.cleverness * 100) / 100,
-        distinctTags: cluster.distinctTags.filter(t => !t.startsWith('freq:')),
-        totalMembers: cluster.members.length,
-        collapsedCount: deduped.collapsed,
-        members: deduped.visible.map(m => {
-          const p = lexicon.phrases[m.phraseId];
-          return {
-            text: p.text,
-            source: p.source,
-            quality: p.quality,
-            pinyinWithTone: p.pinyinWithTone,
-            finals: p.finals,
-            segments: p.segments,
-            tailOffset: m.tailOffset,
-          };
-        }),
-      })),
-    };
-
-    const filename = `depth-${depth}-tone-${toneMode}.json`;
-    const outPath = join(OUT_DIR, filename);
-    writeFileSync(outPath, JSON.stringify(output, null, 0), 'utf-8');
-    const sizeKB = Math.round(readFileSync(outPath).length / 1024);
-    console.error(`  ${filename}: ${output.clusters.length} clusters, ${sizeKB} KB`);
-    fileCount++;
+    allProcessed.push(...processed);
   }
+
+  // Sort all depths together by cleverness for the combined file.
+  allProcessed.sort((a, b) => b.cluster.cleverness - a.cluster.cleverness);
+  const processed = allProcessed;
+
+  // Denormalize: embed full phrase data in each member so browser
+  // doesn't need the lexicon to render Discover.
+  const output = {
+    config: { toneMode, sources: [...DEFAULT_SOURCES] },
+    totalPhrases: lexicon.phrases.length,
+    clusters: processed.map(({ cluster, deduped }) => ({
+      id: cluster.id,
+      pattern: cluster.pattern,
+      patternLength: cluster.patternLength,
+      cleverness: Math.round(cluster.cleverness * 100) / 100,
+      distinctTags: cluster.distinctTags.filter(t => !t.startsWith('freq:')),
+      totalMembers: cluster.members.length,
+      collapsedCount: deduped.collapsed,
+      members: deduped.visible.map(m => {
+        const p = lexicon.phrases[m.phraseId];
+        return {
+          text: p.text,
+          source: p.source,
+          quality: p.quality,
+          pinyinWithTone: p.pinyinWithTone,
+          finals: p.finals,
+          segments: p.segments,
+          tailOffset: m.tailOffset,
+        };
+      }),
+    })),
+  };
+
+  // Count by depth for logging.
+  const byDepth: Record<number, number> = {};
+  for (const { cluster } of processed) {
+    byDepth[cluster.patternLength] = (byDepth[cluster.patternLength] || 0) + 1;
+  }
+
+  // One file per toneMode (depth filtering is client-side).
+  const filename = `tone-${toneMode}.json`;
+  const outPath = join(OUT_DIR, filename);
+  writeFileSync(outPath, JSON.stringify(output, null, 0), 'utf-8');
+  const sizeKB = Math.round(readFileSync(outPath).length / 1024);
+  console.error(`  ${filename}: ${output.clusters.length} clusters, ${sizeKB} KB`);
+  console.error(`    by depth: ${Object.entries(byDepth).sort(([a],[b]) => +a - +b).map(([d,n]) => `${d}押:${n}`).join(' ')}`);
+  fileCount++;
 }
 
 console.error(`[precompute] wrote ${fileCount} cluster files to ${OUT_DIR}`);

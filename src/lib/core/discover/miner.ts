@@ -192,7 +192,15 @@ function scoreCluster(
   const charTailDiv = tailTexts.size / members.length;
   const segTailDiv = lastSegTexts.size / members.length;
   // Use the harsher of the two signals, floored at 0.12.
-  const tailDiv = Math.max(Math.min(charTailDiv, segTailDiv), 0.12);
+  const rawTailDiv = Math.max(Math.min(charTailDiv, segTailDiv), 0.12);
+
+  // Disable tailDiv for 2-push: at depth 2 with medial stripping there
+  // are only ~20 unique rhyme keys → 400 possible pairs → each pattern
+  // has thousands of members sharing tails. Penalizing them kills ALL
+  // 2-push clusters. For depth 3, soften. For 4+, full penalty.
+  const tailDiv = patternLength <= 2 ? 1.0
+    : patternLength === 3 ? Math.pow(rawTailDiv, 0.5)
+    : rawTailDiv;
 
   return avgQuality * (0.5 + diversity) * lengthBonus * memberBonus * tailDiv;
 }
