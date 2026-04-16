@@ -28,59 +28,128 @@
     { bg: 'bg-cyan-100',    ring: 'ring-cyan-300',    text: 'text-cyan-900' }
   ];
 
-  /** Map line index → group color index (or null if line not in any group). */
-  const lineColorMap = $derived(
+  // ── Cross-line positional rhyme detection ──────────────────────────
+  // For each syllable, check if its rhyme key at the same RIGHT-ALIGNED
+  // position matches any other line. This catches not just tail rhymes
+  // but also mid-line rhymes (e.g., position 3 from the right in line 1
+  // rhymes with position 3 from the right in line 2).
+
+  /** Set of rhyme keys that participate in any cross-line positional match. */
+  const keyColorMap = $derived(
     (() => {
-      const map: Record<number, number> = {};
-      analysis.groups.forEach((group, gIdx) => {
-        for (const li of group.lineIndices) {
-          map[li] = gIdx % GROUP_TINTS.length;
+      const map = new Map<string, number>();
+      let colorIdx = 0;
+      const maxLen = Math.max(...analysis.lines.map((l) => l.keys.length), 0);
+
+      // Scan each right-aligned position; group lines by key at that position.
+      for (let R = 0; R < maxLen; R++) {
+        const groups = new Map<string, number[]>();
+        for (const line of analysis.lines) {
+          const pos = line.keys.length - 1 - R;
+          if (pos < 0) continue;
+          const key = line.keys[pos];
+          if (!key) continue;
+          let g = groups.get(key);
+          if (!g) { g = []; groups.set(key, g); }
+          g.push(line.index);
         }
-      });
+        // Keys appearing in ≥2 lines at this position → assign a color.
+        for (const [key, lines] of groups) {
+          if (lines.length >= 2 && !map.has(key)) {
+            map.set(key, colorIdx % GROUP_TINTS.length);
+            colorIdx++;
+          }
+        }
+      }
       return map;
     })()
   );
 
-  /**
-   * For a given line, the depth of its tail rhyme (K) with the strongest
-   * partner in the same group. Used to highlight the last K syllables.
-   */
-  function tailDepthForLine(lineIndex: number): number {
-    let maxK = 0;
-    for (const p of analysis.pairs) {
-      if (p.indexA === lineIndex || p.indexB === lineIndex) {
-        if (p.tailK > maxK) maxK = p.tailK;
-      }
+  /** Check if a specific syllable position is in a cross-line positional match. */
+  function isPositionalRhyme(lineIndex: number, sylIndex: number): boolean {
+    const line = analysis.lines[lineIndex];
+    const R = line.keys.length - 1 - sylIndex;
+    const key = line.keys[sylIndex];
+    if (!key) return false;
+
+    for (const other of analysis.lines) {
+      if (other.index === lineIndex) continue;
+      const otherPos = other.keys.length - 1 - R;
+      if (otherPos < 0 || otherPos >= other.keys.length) continue;
+      if (other.keys[otherPos] === key) return true;
     }
-    return maxK;
+    return false;
   }
 
   /**
-   * A syllable's chip styling has three levels:
-   *   TAIL — in the cross-line tail rhyme (last K positions). Strong tint + ring.
-   *   INTERNAL — elsewhere in the line but shares the line's end-rhyme key
-   *              (internal rhyme). Lighter tint (opacity reduced).
-   *   NONE — doesn't match the end key / no group. Neutral gray.
+   * Syllable chip styling based on cross-line positional rhyme:
+   *   MATCH — this position rhymes with another line at same right-aligned
+   *           position. Strong tint + ring, color by rhyme key.
+   *   ECHO  — key exists in the global palette (rhymes somewhere) but this
+   *           specific position doesn't match. Lighter tint.
+   *   NONE  — key doesn't participate in any cross-line rhyme. Neutral.
    */
-  function chipClass(lineIndex: number, sylIndex: number, totalSyls: number): string {
-    const colorIdx = lineColorMap[lineIndex];
+  function chipClass(lineIndex: number, sylIndex: number): string {
+    const key = analysis.lines[lineIndex].keys[sylIndex];
+    if (!key) return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300 dark:bg-zinc-800';
+
+    const colorIdx = keyColorMap.get(key);
     if (colorIdx === undefined) {
       return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300 dark:bg-zinc-800';
     }
+
     const tint = GROUP_TINTS[colorIdx];
-    const tailDepth = tailDepthForLine(lineIndex);
-    const isInTail = sylIndex >= totalSyls - tailDepth && tailDepth > 0;
-    if (isInTail) {
+    if (isPositionalRhyme(lineIndex, sylIndex)) {
       return `${tint.bg} ${tint.text} ring-1 ${tint.ring}`;
     }
-    // Internal rhyme: syllable matches the line's end-rhyme key but isn't
-    // in the cross-line tail window.
-    const line = analysis.lines[lineIndex];
-    const endKey = line.keys[line.keys.length - 1];
-    if (endKey && line.keys[sylIndex] === endKey) {
-      return `${tint.bg} ${tint.text} opacity-70`;
+    // Echo: same key rhymes elsewhere but not at this exact position.
+    return `${tint.bg} ${tint.text} opacity-50`;
+  }
+
+  /**
+   * Compute a per-line rhyme badge: "N押" for the deepest positional
+   * match, "句内韵" if internal groups exist, "头韵" if head matches.
+   */
+  function lineBadges(lineIndex: number): string[] {
+    const badges: string[] = [];
+
+    // Tail depth (N-push)
+    let maxTailK = 0;
+    for (const p of analysis.pairs) {
+      if (p.indexA === lineIndex || p.indexB === lineIndex) {
+        if (p.tailK > maxTailK) maxTailK = p.tailK;
+      }
     }
-    return 'bg-zinc-100 text-zinc-700 dark:text-zinc-300 dark:bg-zinc-800';
+    if (maxTailK >= 1) badges.push(`${maxTailK}押`);
+
+    // Head rhyme
+    let hasHead = false;
+    for (const p of analysis.pairs) {
+      if ((p.indexA === lineIndex || p.indexB === lineIndex) && p.headK >= 2) {
+        hasHead = true;
+        break;
+      }
+    }
+    if (hasHead) badges.push('头韵');
+
+    // Internal rhyme
+    const line = analysis.lines[lineIndex];
+    if (line.internalGroups.size > 0) badges.push('句内韵');
+
+    // Mid-line rhyme: any non-tail, non-head position matches
+    let hasMidLine = false;
+    for (let i = 0; i < line.keys.length; i++) {
+      const R = line.keys.length - 1 - i;
+      if (R < maxTailK) continue; // already counted as tail
+      if (i < 2 && hasHead) continue; // already counted as head
+      if (isPositionalRhyme(lineIndex, i)) {
+        hasMidLine = true;
+        break;
+      }
+    }
+    if (hasMidLine) badges.push('句中韵');
+
+    return badges;
   }
 
   const internalRhymeLineCount = $derived(
@@ -214,10 +283,10 @@
     {:else}
       <div class="space-y-3">
         {#each analysis.lines as line (line.index)}
-          {@const colorIdx = lineColorMap[line.index]}
+          {@const hasRhyme = lineBadges(line.index).length > 0}
           <div
-            class="rounded-lg border bg-white dark:bg-zinc-900 p-4 transition {colorIdx !== undefined
-              ? `${GROUP_TINTS[colorIdx].ring} ring-1`
+            class="rounded-lg border bg-white dark:bg-zinc-900 p-4 transition {hasRhyme
+              ? 'ring-1 ring-sky-300 dark:ring-sky-700'
               : 'border-zinc-200 dark:border-zinc-800'}"
           >
             <div class="mb-2 flex items-baseline gap-3">
@@ -225,14 +294,25 @@
               <span class="text-sm text-zinc-700 dark:text-zinc-300">{line.text || '（空行）'}</span>
             </div>
             {#if line.syllables.length > 0}
+              <!-- Rhyme type badges -->
+              {@const badges = lineBadges(line.index)}
+              {#if badges.length > 0}
+                <div class="mb-1.5 flex flex-wrap gap-1">
+                  {#each badges as badge}
+                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold
+                      {badge.includes('押') ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' :
+                       badge === '头韵' ? 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' :
+                       badge === '句内韵' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' :
+                       'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'}">
+                      {badge}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
               <div class="flex flex-wrap gap-1.5 font-mono text-xs">
                 {#each line.syllables as syl, i (i)}
                   <span
-                    class="rounded px-1.5 py-1 {chipClass(
-                      line.index,
-                      i,
-                      line.syllables.length
-                    )}"
+                    class="rounded px-1.5 py-1 {chipClass(line.index, i)}"
                     title="{syl.char} · {syl.pinyinWithTone} · {line.keys[i] || '?'}"
                   >
                     <span class="font-sans text-sm">{syl.char}</span>
