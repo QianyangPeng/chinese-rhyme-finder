@@ -112,24 +112,21 @@ def _ensure_cache() -> Path:
 # Public API
 # ---------------------------------------------------------------------------
 
-def _char_edit_distance_1(a: str, b: str) -> bool:
-    """True if a and b differ by exactly 1 character substitution (same length)."""
-    if len(a) != len(b):
-        return False
-    diffs = sum(1 for x, y in zip(a, b) if x != y)
-    return diffs == 1
-
-
 def _dedup_near_variants(phrases: list[RawPhrase]) -> list[RawPhrase]:
     """Remove near-duplicate idiom variants that differ by exactly 1 character.
 
-    xinhua has many sets like 道不拾遗/道无拾遗/路不拾遗/路无拾遗,
-    目不斜视/目不邪视/目不别视. These inflate cluster sizes without adding
-    real variety. Keep only the highest-quality entry per group.
+    Uses a wildcard-pattern approach: for each phrase, replace each
+    character position with a sentinel → hash → group. Phrases sharing
+    any pattern are 1-edit variants.
 
-    Groups are found transitively: if A≈B and B≈C, {A,B,C} are one group.
+    O(n * k) where k = max phrase length. Replaces the O(n²) pairwise
+    approach that took 10+ minutes on 28k idioms.
+
+    Groups are transitive: if A≈B and B≈C, {A,B,C} are one group.
     """
+    import sys
     n = len(phrases)
+
     # Union-Find
     parent = list(range(n))
     def find(x: int) -> int:
@@ -142,20 +139,21 @@ def _dedup_near_variants(phrases: list[RawPhrase]) -> list[RawPhrase]:
         if rx != ry:
             parent[rx] = ry
 
-    # Only compare same-length phrases (edit distance 1 only makes sense
-    # at same length, and most idioms are 4-char).
-    by_len: dict[int, list[int]] = {}
+    # Build wildcard patterns: for each phrase, generate k patterns
+    # (one per character position). Phrases sharing a pattern are 1-edit.
+    pattern_to_first: dict[str, int] = {}
     for i, p in enumerate(phrases):
-        by_len.setdefault(len(p.text), []).append(i)
+        chars = list(p.text)
+        for pos in range(len(chars)):
+            original = chars[pos]
+            chars[pos] = '\x00'   # sentinel
+            pattern = ''.join(chars)
+            chars[pos] = original  # restore
 
-    for indices in by_len.values():
-        # O(n²) within each length bucket, but 4-char idioms dominate
-        # (~28k) so this is the hot path. Still fast enough at build time.
-        for ai in range(len(indices)):
-            for bi in range(ai + 1, len(indices)):
-                ia, ib = indices[ai], indices[bi]
-                if _char_edit_distance_1(phrases[ia].text, phrases[ib].text):
-                    union(ia, ib)
+            if pattern in pattern_to_first:
+                union(i, pattern_to_first[pattern])
+            else:
+                pattern_to_first[pattern] = i
 
     # For each group, keep only the highest-quality member.
     groups: dict[int, list[int]] = {}
@@ -173,7 +171,7 @@ def _dedup_near_variants(phrases: list[RawPhrase]) -> list[RawPhrase]:
             dropped += len(members) - 1
 
     if dropped:
-        print(f"[xinhua-idiom] deduped {dropped} near-variant idioms", file=__import__('sys').stderr)
+        print(f"[xinhua-idiom] deduped {dropped} near-variant idioms", file=sys.stderr)
     return kept
 
 
