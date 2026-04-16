@@ -1,52 +1,75 @@
 <script lang="ts">
-  import { getCurrentLexicon, ensureExtendedLexicon } from '$lib/core/corpus';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
 
-  let lexicon = $state(getCurrentLexicon());
+  // Homepage loads ONLY manifest.json (~2KB) for source counts.
+  // NO lexicon download (which is 280MB across 42 files).
+  interface ManifestEntry { source: string; file: string; count: number; sizeKB: number; chunk?: number }
+
+  let sourceCounts = $state<Record<string, number>>({});
+  let totalPhrases = $state(0);
   let lexiconLoading = $state(true);
 
-  onMount(() => {
-    ensureExtendedLexicon(base).then((lex) => {
-      lexicon = lex;
-      lexiconLoading = false;
-    });
+  onMount(async () => {
+    try {
+      const res = await fetch(`${base}/data/manifest.json`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const manifest: ManifestEntry[] = await res.json();
+      // Sum counts per source (chunks share the same source id).
+      const counts: Record<string, number> = {};
+      let total = 0;
+      for (const entry of manifest) {
+        counts[entry.source] = (counts[entry.source] || 0) + entry.count;
+        total += entry.count;
+      }
+      sourceCounts = counts;
+      totalPhrases = total;
+    } catch {
+      // Manifest missing — show zeros.
+    }
+    lexiconLoading = false;
   });
 
-  // Compute per-source counts from the loaded lexicon.
-  const sourceCounts = $derived(
-    (() => {
-      const counts: Record<string, number> = {};
-      for (const p of lexicon.phrases) {
-        counts[p.source] = (counts[p.source] || 0) + 1;
-      }
-      return counts;
-    })()
-  );
-
-  const totalPhrases = $derived(lexicon.phrases.length);
-
-  // ── Source detail modal ───────────────────────────────────────────
+  // ── Source detail modal (loads source file on-demand) ─────────────
   let modalSourceId = $state<string | null>(null);
   let modalPage = $state(0);
+  let modalPhrases = $state<any[]>([]);
+  let modalLoading = $state(false);
   const MODAL_PAGE_SIZE = 50;
 
-  const modalPhrases = $derived(
-    modalSourceId
-      ? lexicon.phrases.filter((p) => p.source === modalSourceId)
-      : []
-  );
   const modalTotalPages = $derived(Math.ceil(modalPhrases.length / MODAL_PAGE_SIZE));
   const modalSlice = $derived(
     modalPhrases.slice(modalPage * MODAL_PAGE_SIZE, (modalPage + 1) * MODAL_PAGE_SIZE)
   );
 
-  function openSourceModal(id: string) {
+  async function openSourceModal(id: string) {
     modalSourceId = id;
     modalPage = 0;
+    modalPhrases = [];
+    modalLoading = true;
+    try {
+      // Fetch manifest to find files for this source
+      const mRes = await fetch(`${base}/data/manifest.json`);
+      const manifest: ManifestEntry[] = await mRes.json();
+      const files = manifest.filter((m) => m.source === id).map((m) => m.file);
+      // Fetch all chunks in parallel
+      const chunks = await Promise.all(
+        files.map((f) => fetch(`${base}/data/${f}`).then((r) => r.json()))
+      );
+      const all: any[] = [];
+      for (const chunk of chunks) {
+        if (chunk?.phrases) all.push(...chunk.phrases);
+      }
+      modalPhrases = all;
+    } catch {
+      modalPhrases = [];
+    }
+    modalLoading = false;
   }
+
   function closeModal() {
     modalSourceId = null;
+    modalPhrases = [];
   }
 
   // Source metadata for the dashboard cards.
@@ -281,6 +304,12 @@
 
       <!-- Modal body: scrollable table -->
       <div class="flex-1 overflow-y-auto px-6 py-3">
+        {#if modalLoading}
+          <div class="flex items-center justify-center py-12 text-zinc-400">
+            <div class="h-6 w-6 rounded-full border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-500" style="animation: spin 0.7s linear infinite"></div>
+            <span class="ml-2 text-sm">加载数据…</span>
+          </div>
+        {:else}
         <table class="w-full text-sm">
           <thead class="sticky top-0 z-10 bg-white dark:bg-zinc-900 [&_th]:border-b [&_th]:border-zinc-200 dark:[&_th]:border-zinc-700">
             <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left text-xs text-zinc-500">
@@ -313,6 +342,7 @@
             {/each}
           </tbody>
         </table>
+        {/if}
       </div>
 
       <!-- Modal footer: pagination -->
