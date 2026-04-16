@@ -264,6 +264,7 @@
   });
   let miningInProgress = $state(true);
   let usingPrecomputed = $state(false);
+  let totalPhrasesInCorpus = $state(0);
   const PAGE_SIZE = 50;
   let visibleCount = $state(PAGE_SIZE);
 
@@ -281,6 +282,7 @@
         .then((r) => r.ok ? r.json() : Promise.reject('not found'))
         .then((data) => {
           catalog = catalogFromPrecomputed(data);
+          totalPhrasesInCorpus = data.totalPhrases ?? 0;
           usingPrecomputed = true;
           visibleCount = PAGE_SIZE;
           miningInProgress = false;
@@ -295,46 +297,48 @@
   });
 
   function doRuntimeMining() {
-    // Ensure lexicon is loaded when falling back to runtime mining.
-    ensureExtendedLexicon(base);
-    const lex = activeLexicon;
-    const depth = minDepth;
-    const members = minMembers;
-    const tail = tailOnly;
-    const tone = toneMode;
-
     usingPrecomputed = false;
-    // Defer with double-rAF so spinner renders before miner blocks.
-    setTimeout(() => {
-      requestAnimationFrame(() => {
+    // MUST await full lexicon download before mining — otherwise we mine
+    // against the seed (865 entries) and get 0 results.
+    ensureExtendedLexicon(base).then((fullLex) => {
+      lexicon = fullLex;
+      const depth = minDepth;
+      const members = minMembers;
+      const tail = tailOnly;
+      const tone = toneMode;
+      const lex = getFilteredLexicon(fullLex, enabledSources);
+      totalPhrasesInCorpus = lex.phrases.length;
+
+      setTimeout(() => {
         requestAnimationFrame(() => {
-          const raw = mineClusters(lex, scheme, {
-            minPatternLength: depth,
-            minMembers: members,
-            tailOnly: tail,
-            toneMode: tone,
-            maxClusters: 8000,
+          requestAnimationFrame(() => {
+            const raw = mineClusters(lex, scheme, {
+              minPatternLength: depth,
+              minMembers: members,
+              tailOnly: tail,
+              toneMode: tone,
+              maxClusters: 8000,
+            });
+
+            const withDedup = raw.clusters
+              .map((cluster) => ({
+                cluster,
+                deduped: stemDedupe(cluster.members, raw.lexiconRef, cluster.patternLength),
+              }))
+              .filter(({ deduped }) => deduped.visible.length >= members)
+              .slice(0, 2000);
+
+            catalog = {
+              clusters: withDedup.map(({ cluster }) => cluster),
+              lexiconRef: raw.lexiconRef,
+              _deduped: new Map(withDedup.map(({ cluster, deduped }) => [cluster.id, deduped])),
+            };
+            visibleCount = PAGE_SIZE;
+            miningInProgress = false;
           });
-
-          // Apply stemDedupe + minMembers check.
-          const withDedup = raw.clusters
-            .map((cluster) => ({
-              cluster,
-              deduped: stemDedupe(cluster.members, raw.lexiconRef, cluster.patternLength),
-            }))
-            .filter(({ deduped }) => deduped.visible.length >= minMembers)
-            .slice(0, 200);
-
-          catalog = {
-            clusters: withDedup.map(({ cluster }) => cluster),
-            lexiconRef: raw.lexiconRef,
-            _deduped: new Map(withDedup.map(({ cluster, deduped }) => [cluster.id, deduped])),
-          };
-          visibleCount = PAGE_SIZE;
-          miningInProgress = false;
         });
-      });
-    }, 0);
+      }, 0);
+    });
   }
 
   // (Removed: specificTags, avgQuality, memberSources — lens tabs gone)
@@ -446,10 +450,12 @@
   <!-- Lexicon status -->
   <!-- Incremental loading status -->
   <div class="mb-5 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-    词库 <span class="font-semibold">{lexicon.phrases.length.toLocaleString()}</span> 条
-    {#if loadedSourceCount > 0}
+    词库 <span class="font-semibold">{totalPhrasesInCorpus > 0 ? totalPhrasesInCorpus.toLocaleString() : '加载中…'}</span> 条
+    {#if usingPrecomputed}
+      <span class="text-emerald-600 dark:text-emerald-400">（预算数据，秒开）</span>
+    {:else if loadedSourceCount > 0}
       <span class="text-emerald-600 dark:text-emerald-400">
-        （{loadedSourceCount} 个语料源已加载，更多加载中…）
+        （{loadedSourceCount} 个语料源已加载）
       </span>
     {/if}
   </div>
