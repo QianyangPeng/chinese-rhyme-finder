@@ -269,6 +269,17 @@
   let totalPhrasesInCorpus = $state(0);
   let filterText = $state('');
   const PAGE_SIZE = 50;
+
+  const filteredClusters = $derived(
+    filterText.trim()
+      ? catalog.clusters.filter((c) => {
+          const q = filterText.trim();
+          const deduped = catalog._deduped?.get(c.id);
+          const members = deduped?.visible ?? c.members;
+          return members.some((m: any) => catalog.lexiconRef[m.phraseId]?.text?.includes(q));
+        })
+      : catalog.clusters
+  );
   let visibleCount = $state(PAGE_SIZE);
 
   $effect(() => {
@@ -577,15 +588,6 @@
       class="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
     />
   </div>
-
-  {@const filteredClusters = filterText.trim()
-    ? catalog.clusters.filter((c) => {
-        const q = filterText.trim();
-        const deduped = catalog._deduped?.get(c.id);
-        const members = deduped?.visible ?? c.members;
-        return members.some((m) => catalog.lexiconRef[m.phraseId]?.text?.includes(q));
-      })
-    : catalog.clusters}
 
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
     找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{filteredClusters.length}</span> 组 cluster
