@@ -197,7 +197,7 @@
   // (~500KB), render instantly. When user has custom source toggles →
   // fall back to runtime miner with spinner.
 
-  const DEFAULT_ON_SOURCES = new Set(['xinhua-idiom', 'opensubtitles-zh', 'wiktionary-slang', 'lyrics-hiphop', 'lyrics-pop']);
+  const DEFAULT_ON_SOURCES = new Set(['xinhua-idiom', 'opensubtitles-zh', 'wiktionary-slang', 'lyrics-hiphop', 'lyrics-pop', 'moegirl-acg']);
 
   function isDefaultSourceConfig(): boolean {
     for (const toggle of SOURCE_TOGGLES) {
@@ -448,13 +448,13 @@
 </script>
 
 <svelte:head>
-  <title>Discover · 世界最强押韵</title>
+  <title>押韵灵感 · 世界最强押韵</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
     <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-      Discover · 灵感发现
+      押韵灵感
     </h1>
     <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
       算法挖掘出来的押韵 cluster — 按巧妙度排序。每组里所有短语能套到同一个韵脚。

@@ -8,9 +8,9 @@
   // svelte.config.js to '/chinese-rhyme-finder' in production).
   const LINKS: ReadonlyArray<{ href: string; label: string; emoji: string }> = [
     { href: '/',         label: '主页',     emoji: '🏠' },
-    { href: '/discover', label: 'Discover', emoji: '🔥' },
-    { href: '/search',   label: 'Search',   emoji: '🔍' },
-    { href: '/analyze',  label: 'Analyze',  emoji: '📖' }
+    { href: '/discover', label: '押韵灵感', emoji: '🔥' },
+    { href: '/search',   label: '找押韵',   emoji: '🔍' },
+    { href: '/analyze',  label: '歌词分析', emoji: '📖' }
   ];
 
   /** Current pathname without the GitHub Pages base prefix. */

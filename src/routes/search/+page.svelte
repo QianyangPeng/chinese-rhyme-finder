@@ -120,12 +120,12 @@
 </script>
 
 <svelte:head>
-  <title>查找押韵 · 世界最强押韵</title>
+  <title>找押韵 · 世界最强押韵</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">查找押韵</h1>
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">找押韵</h1>
     <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
       输入一个词组，从内置词库中查找等长且押韵的候选 — 按"严格 → 宽松"分层展示。
     </p>

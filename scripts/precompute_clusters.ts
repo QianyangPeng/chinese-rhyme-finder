@@ -35,6 +35,7 @@ const DEFAULT_SOURCES = new Set([
   'wiktionary-slang',
   'lyrics-hiphop',
   'lyrics-pop',
+  'moegirl-acg',
 ]);
 
 const DEPTHS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
