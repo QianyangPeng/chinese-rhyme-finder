@@ -107,6 +107,13 @@
       license: 'MIT'
     },
     {
+      id: 'moegirl-acg',
+      label: 'ACG · 二次元',
+      desc: '萌娘百科 ACG 用语、网络流行语、弹幕用语、萌属性',
+      color: 'border-fuchsia-300 bg-fuchsia-50 dark:border-fuchsia-800 dark:bg-fuchsia-950/30',
+      license: 'CC-BY-NC-SA'
+    },
+    {
       id: 'wiktionary-slang',
       label: '网络用语',
       desc: '维基词典收录的汉语网络流行语',

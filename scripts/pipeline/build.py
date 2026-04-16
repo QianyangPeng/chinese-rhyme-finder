@@ -56,6 +56,8 @@ SOURCE_REGISTRY: dict[str, str] = {
     # ── Lyrics (high creative density, MIT licensed) ─────────────────────
     "zh:lyrics_hiphop":    "pipeline.sources.zh.lyrics_hiphop",
     "zh:lyrics_pop":       "pipeline.sources.zh.lyrics_pop",
+    # ── ACG / internet culture ─────────────────────────────────────────
+    "zh:moegirl":          "pipeline.sources.zh.moegirl",
     # ── Large-corpus mining (freq-based extraction) ──────────────────────
     "zh:opensubtitles":    "pipeline.sources.zh.opensubtitles",
     # Future:

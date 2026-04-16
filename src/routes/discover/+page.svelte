@@ -44,7 +44,8 @@
     'wiktionary-slang':    { label: '网络', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' },
     'opensubtitles-zh':    { label: '口语', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200' },
     'lyrics-hiphop':       { label: '说唱', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' },
-    'lyrics-pop':          { label: '歌词', cls: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-200' }
+    'lyrics-pop':          { label: '歌词', cls: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-200' },
+    'moegirl-acg':         { label: 'ACG', cls: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-200' }
   };
 
   function sourceBadge(source: string): { label: string; cls: string } {
@@ -92,6 +93,7 @@
     { id: 'wiktionary-slang',    label: '网络', defaultOn: true },
     { id: 'lyrics-hiphop',       label: '说唱', defaultOn: true },
     { id: 'lyrics-pop',          label: '歌词', defaultOn: true },
+    { id: 'moegirl-acg',         label: 'ACG',  defaultOn: true },
     { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: false },
     { id: 'chinese-poetry/song', label: '宋词', defaultOn: false },
     { id: 'xinhua-xiehouyu',     label: '歇后', defaultOn: false },
