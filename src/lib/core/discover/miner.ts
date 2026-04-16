@@ -100,7 +100,14 @@ function buildBuckets(
 }
 
 /** Score a cluster's "cleverness". See DECISIONS.md D-006 for the
- *  rationale. Phase 1 implementation; refined later as data grows. */
+ *  rationale. Tuned for the mixed-corpus era (idioms + OpenSubtitles).
+ *
+ *  Key signal added in 2026-04: **tail diversity**. When every member
+ *  of a cluster shares the exact same last K characters (K = pattern
+ *  length), they're template variants ("叫什么名字 / 你叫什么名字 /
+ *  他叫什么名字") — not genuine rhyme discovery. Severely penalizes
+ *  these so creative clusters like "相对华丽 / 洋洋得意 / 降维打击"
+ *  rank above trivial pattern-fillers. */
 function scoreCluster(
   members: readonly ClusterMember[],
   lexicon: Lexicon,
@@ -112,8 +119,11 @@ function scoreCluster(
   for (const m of members) qSum += lexicon.phrases[m.phraseId].quality;
   const avgQuality = qSum / members.length;
 
-  // Domain diversity: more distinct tags = higher.
-  const diversity = Math.min(distinctTags.length, 5) / 5;
+  // Domain diversity: more distinct tags = higher. Strip freq:N debug
+  // tags (each opensubs member carries a unique freq:NNN which inflated
+  // diversity unfairly — 12 "tags" vs idiom's 2).
+  const semanticTags = distinctTags.filter((t) => !t.startsWith('freq:'));
+  const diversity = Math.min(semanticTags.length, 5) / 5;
 
   // Multi-syllable depth bonus (logarithmic so 4 押 doesn't dominate
   // 2 押 by a 2x factor).
@@ -123,7 +133,26 @@ function scoreCluster(
   // shouldn't overshadow tighter ones with 4 sharp members).
   const memberBonus = Math.min(members.length, 8) / 8;
 
-  return avgQuality * (0.5 + diversity) * lengthBonus * memberBonus;
+  // ── Tail diversity ────────────────────────────────────────────────
+  // Count how many DISTINCT tail texts exist across members (each tail
+  // is the last `patternLength` characters). Members necessarily rhyme
+  // on these positions, but when the *literal characters* also match,
+  // they're prefix-variations of one phrase — not discovery.
+  //
+  //   tailDiv = 1.0  → every member has a unique tail → creative cluster
+  //   tailDiv = 1/N  → all N share one tail → template filler
+  //
+  // Floor at 0.15 so even boring clusters survive at low rank rather
+  // than disappearing entirely.
+  const tailTexts = new Set<string>();
+  for (const m of members) {
+    const text = lexicon.phrases[m.phraseId].text;
+    const chars = [...text];
+    tailTexts.add(chars.slice(Math.max(0, chars.length - patternLength)).join(''));
+  }
+  const tailDiv = Math.max(tailTexts.size / members.length, 0.15);
+
+  return avgQuality * (0.5 + diversity) * lengthBonus * memberBonus * tailDiv;
 }
 
 /**

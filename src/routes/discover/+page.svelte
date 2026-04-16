@@ -578,7 +578,7 @@
                 {#if cluster.distinctTags.length > 0}
                   <span>·</span>
                   <span class="text-zinc-400">
-                    {cluster.distinctTags.map((t) => `#${t}`).join(' ')}
+                    {cluster.distinctTags.filter((t) => !t.startsWith('freq:')).map((t) => `#${t}`).join(' ')}
                   </span>
                 {/if}
               </p>
