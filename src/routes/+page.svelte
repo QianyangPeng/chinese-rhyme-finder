@@ -275,7 +275,7 @@
       <!-- Modal body: scrollable table -->
       <div class="flex-1 overflow-y-auto px-6 py-3">
         <table class="w-full text-sm">
-          <thead class="sticky top-0 bg-white dark:bg-zinc-900">
+          <thead class="sticky top-0 z-10 bg-white dark:bg-zinc-900 shadow-[0_1px_0_0] shadow-zinc-200 dark:shadow-zinc-700">
             <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left text-xs text-zinc-500">
               <th class="py-2 pr-3 w-8">#</th>
               <th class="py-2 pr-3">短语</th>

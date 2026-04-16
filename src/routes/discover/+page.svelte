@@ -200,8 +200,9 @@
     const tone = toneMode;
 
     miningInProgress = true;
-    // Defer to next frame so the spinner renders before computation blocks.
-    const timer = setTimeout(() => {
+    // Defer with double-rAF so the spinner actually paints + animates
+    // before the synchronous miner blocks the main thread.
+    const timer = setTimeout(() => { requestAnimationFrame(() => { requestAnimationFrame(() => {
       rawCatalog = mineClusters(lex, scheme, {
         minPatternLength: depth,
         minMembers: members,
@@ -210,7 +211,7 @@
         maxClusters: 8000
       });
       miningInProgress = false;
-    }, 20);
+    }); }); }, 0);
     return () => clearTimeout(timer);
   });
 
