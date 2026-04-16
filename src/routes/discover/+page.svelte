@@ -176,14 +176,12 @@
     getFilteredLexicon(lexicon, enabledSources)
   );
 
-  // Mine a generous batch of clusters. Bucket cache is keyed by
-  // (lexicon, scheme.id, toneMode, tailOnly) so flipping tone or filters
-  // stays cheap. Cap raised from 2000 → 8000 so lens-specific filters
-  // (poetry-only, non-idiom) can find enough post-filter survivors —
-  // the miner's cleverness ranker heavily favors tag-diverse clusters,
-  // which systematically pushes pure-register clusters below 2000.
-  const rawCatalog = $derived(
-    mineClusters(activeLexicon, scheme, {
+  // Mine clusters with deferred computation so the UI can show a spinner.
+  // mineClusters is synchronous and blocks the main thread for 2-4s on
+  // 100k+ lexicons. Using $effect + setTimeout(0) lets the spinner
+  // paint before the heavy work begins.
+  let rawCatalog = $state(
+    mineClusters(getCurrentLexicon(), scheme, {
       minPatternLength: minDepth,
       minMembers,
       tailOnly,
@@ -191,6 +189,30 @@
       maxClusters: 8000
     })
   );
+  let miningInProgress = $state(false);
+
+  $effect(() => {
+    // Track all dependencies that trigger re-mining.
+    const lex = activeLexicon;
+    const depth = minDepth;
+    const members = minMembers;
+    const tail = tailOnly;
+    const tone = toneMode;
+
+    miningInProgress = true;
+    // Defer to next frame so the spinner renders before computation blocks.
+    const timer = setTimeout(() => {
+      rawCatalog = mineClusters(lex, scheme, {
+        minPatternLength: depth,
+        minMembers: members,
+        tailOnly: tail,
+        toneMode: tone,
+        maxClusters: 8000
+      });
+      miningInProgress = false;
+    }, 20);
+    return () => clearTimeout(timer);
+  });
 
   // (Removed: specificTags, avgQuality, memberSources — lens tabs gone)
 
@@ -443,7 +465,15 @@
   </p>
 
   <!-- Cluster cards -->
-  {#if catalog.clusters.length === 0}
+  {#if miningInProgress}
+    <div class="flex flex-col items-center justify-center py-20 text-zinc-400">
+      <svg class="h-8 w-8 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <p class="mt-3 text-sm">正在计算押韵组合…</p>
+    </div>
+  {:else if catalog.clusters.length === 0}
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center text-sm text-zinc-500">
       {#if lens === 'saved'}
         还没有收藏的 cluster —— 去其它透镜逛一逛，看到喜欢的点 <span class="mx-1 align-middle">♡</span> 收藏它。

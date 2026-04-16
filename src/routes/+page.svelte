@@ -4,10 +4,12 @@
   import { onMount } from 'svelte';
 
   let lexicon = $state(getCurrentLexicon());
+  let lexiconLoading = $state(true);
 
   onMount(() => {
     ensureExtendedLexicon(base).then((lex) => {
       lexicon = lex;
+      lexiconLoading = false;
     });
   });
 
@@ -23,6 +25,29 @@
   );
 
   const totalPhrases = $derived(lexicon.phrases.length);
+
+  // ── Source detail modal ───────────────────────────────────────────
+  let modalSourceId = $state<string | null>(null);
+  let modalPage = $state(0);
+  const MODAL_PAGE_SIZE = 50;
+
+  const modalPhrases = $derived(
+    modalSourceId
+      ? lexicon.phrases.filter((p) => p.source === modalSourceId)
+      : []
+  );
+  const modalTotalPages = $derived(Math.ceil(modalPhrases.length / MODAL_PAGE_SIZE));
+  const modalSlice = $derived(
+    modalPhrases.slice(modalPage * MODAL_PAGE_SIZE, (modalPage + 1) * MODAL_PAGE_SIZE)
+  );
+
+  function openSourceModal(id: string) {
+    modalSourceId = id;
+    modalPage = 0;
+  }
+  function closeModal() {
+    modalSourceId = null;
+  }
 
   // Source metadata for the dashboard cards.
   const SOURCES: Array<{
@@ -135,16 +160,29 @@
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each SOURCES as src (src.id)}
         {@const count = sourceCounts[src.id] ?? 0}
-        <div class="rounded-lg border {src.color} p-4">
+        <button
+          class="rounded-lg border {src.color} p-4 text-left transition hover:shadow-md hover:scale-[1.02] cursor-pointer"
+          onclick={() => count > 0 && openSourceModal(src.id)}
+          disabled={count === 0}
+        >
           <div class="flex items-baseline justify-between">
             <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">{src.label}</h3>
             <span class="font-mono text-lg font-bold text-zinc-900 dark:text-zinc-100">
-              {count > 0 ? count.toLocaleString() : '—'}
+              {#if lexiconLoading}
+                <span class="inline-block h-5 w-12 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700"></span>
+              {:else}
+                {count > 0 ? count.toLocaleString() : '—'}
+              {/if}
             </span>
           </div>
           <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{src.desc}</p>
-          <p class="mt-1 font-mono text-[10px] text-zinc-400">{src.license}</p>
-        </div>
+          <div class="mt-1 flex items-center justify-between">
+            <span class="font-mono text-[10px] text-zinc-400">{src.license}</span>
+            {#if count > 0}
+              <span class="text-[10px] text-zinc-400">点击查看 →</span>
+            {/if}
+          </div>
+        </button>
       {/each}
     </div>
     <p class="mt-3 text-right text-sm text-zinc-500">
@@ -205,3 +243,91 @@
     </p>
   </footer>
 </div>
+
+<!-- Source detail modal -->
+{#if modalSourceId}
+  {@const srcMeta = SOURCES.find((s) => s.id === modalSourceId)}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+    onclick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+  >
+    <div class="mx-4 flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl">
+      <!-- Modal header -->
+      <div class="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-4">
+        <div>
+          <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            {srcMeta?.label ?? modalSourceId}
+          </h3>
+          <p class="text-xs text-zinc-500">
+            {modalPhrases.length.toLocaleString()} 条 · 第 {modalPage + 1}/{modalTotalPages} 页
+          </p>
+        </div>
+        <button
+          class="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          onclick={closeModal}
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal body: scrollable table -->
+      <div class="flex-1 overflow-y-auto px-6 py-3">
+        <table class="w-full text-sm">
+          <thead class="sticky top-0 bg-white dark:bg-zinc-900">
+            <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left text-xs text-zinc-500">
+              <th class="py-2 pr-3 w-8">#</th>
+              <th class="py-2 pr-3">短语</th>
+              <th class="py-2 pr-3">拼音</th>
+              <th class="py-2 pr-3">词性</th>
+              <th class="py-2 text-right">质量</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each modalSlice as phrase, i (phrase.text)}
+              <tr class="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+                <td class="py-1.5 pr-3 font-mono text-xs text-zinc-400">
+                  {modalPage * MODAL_PAGE_SIZE + i + 1}
+                </td>
+                <td class="py-1.5 pr-3 font-semibold text-zinc-900 dark:text-zinc-100">
+                  {phrase.text}
+                </td>
+                <td class="py-1.5 pr-3 font-mono text-xs text-zinc-500">
+                  {phrase.pinyinWithTone?.join(' ') ?? ''}
+                </td>
+                <td class="py-1.5 pr-3 font-mono text-xs text-zinc-500">
+                  {phrase.segments?.map((s) => `${s.text}/${s.pos}`).join(' ') ?? ''}
+                </td>
+                <td class="py-1.5 text-right font-mono text-xs text-zinc-400">
+                  {phrase.quality.toFixed(2)}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Modal footer: pagination -->
+      <div class="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800 px-6 py-3">
+        <button
+          class="rounded border border-zinc-300 dark:border-zinc-700 px-3 py-1 text-xs disabled:opacity-30"
+          disabled={modalPage === 0}
+          onclick={() => (modalPage = Math.max(0, modalPage - 1))}
+        >
+          上一页
+        </button>
+        <span class="text-xs text-zinc-500">
+          {modalPage * MODAL_PAGE_SIZE + 1}–{Math.min((modalPage + 1) * MODAL_PAGE_SIZE, modalPhrases.length)} / {modalPhrases.length.toLocaleString()}
+        </span>
+        <button
+          class="rounded border border-zinc-300 dark:border-zinc-700 px-3 py-1 text-xs disabled:opacity-30"
+          disabled={modalPage >= modalTotalPages - 1}
+          onclick={() => (modalPage = Math.min(modalTotalPages - 1, modalPage + 1))}
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
