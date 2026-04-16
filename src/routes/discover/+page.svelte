@@ -41,6 +41,31 @@
     };
   }
 
+  /**
+   * POS-family color + label for a jieba ICTCLAS tag. The underlying
+   * tagset has ~40 tags; we collapse into 7 families that matter for
+   * rap-style pattern recognition.
+   *   n/nr/ns/nz/nt/nl → noun (blue)
+   *   v/vn/vd          → verb (red)
+   *   a/ad/an/z        → adjective-ish (amber)
+   *   d                → adverb (emerald)
+   *   i/l              → idiom/fixed (violet)
+   *   m/q              → numeral/classifier (cyan)
+   *   u/r/c/p/y/e/o/k  → function word (zinc)
+   */
+  function posFamily(pos: string): { cls: string; label: string } {
+    if (pos === 'nr' || pos === 'nrt') return { cls: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-200', label: pos };
+    if (pos === 'ns')                   return { cls: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200', label: pos };
+    if (pos.startsWith('n'))            return { cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200', label: pos };
+    if (pos.startsWith('v'))            return { cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200', label: pos };
+    if (pos.startsWith('a') || pos === 'z') return { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200', label: pos };
+    if (pos === 'd')                    return { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200', label: pos };
+    if (pos === 'i' || pos === 'l')     return { cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200', label: pos };
+    if (pos === 'm' || pos === 'q')     return { cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200', label: pos };
+    // function words (particles, pronouns, conjunctions) — muted
+    return { cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500', label: pos };
+  }
+
   let toneMode = $state<ToneMode>('none');
   let minDepth = $state(2);
   let minMembers = $state(3);
@@ -484,6 +509,22 @@
                     </div>
                   {/each}
                 </div>
+                {#if phrase.segments && phrase.segments.length > 0}
+                  <!-- POS-segment row: one chip per jieba word, colored by POS family.
+                       Shows the grammatical skeleton so users can spot patterns like
+                       nr+u+n ("姜维的戏") or d+a ("相对华丽") at a glance. -->
+                  <div class="mt-1 flex flex-wrap gap-[2px]">
+                    {#each phrase.segments as seg, si (si)}
+                      {@const fam = posFamily(seg.pos)}
+                      <span
+                        class="rounded px-1 py-0 font-mono text-[9px] leading-tight {fam.cls}"
+                        title="{seg.text} · {seg.pos}"
+                      >
+                        <span class="font-sans">{seg.text}</span><span class="ml-[2px] opacity-70">{seg.pos}</span>
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
               </li>
             {/each}
           </ul>

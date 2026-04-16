@@ -52,8 +52,10 @@ SOURCE_REGISTRY: dict[str, str] = {
     "zh:poetry_tang":      "pipeline.sources.zh.poetry_tang",
     "zh:poetry_song":      "pipeline.sources.zh.poetry_song",
     "zh:wiktionary_slang": "pipeline.sources.zh.wiktionary_slang",
+    "zh:opensubtitles":    "pipeline.sources.zh.opensubtitles",
     # Future:
-    # "zh:opensubtitles":    "pipeline.sources.zh.opensubtitles",
+    # "zh:weibo_dump":       "pipeline.sources.zh.weibo_dump",
+    # "zh:wiki_intros":      "pipeline.sources.zh.wiki_intros",
     # "en:opensubtitles":    "pipeline.sources.en.opensubtitles",
 }
 
@@ -216,13 +218,32 @@ def main(argv: list[str] | None = None) -> int:
     out_path = Path(args.out)
     start = time.time()
 
-    # Stream raws from each source
+    # Stream raws from each source. Earlier sources (by registry order) win
+    # on text dedup — so xinhua's curated 成语 entry stays even if
+    # OpenSubtitles later re-extracts the same text as a frequent n-gram.
+    # Sources later in the list still contribute phrases the earlier ones
+    # missed. Re-sort by putting big n-gram sources last in registry order.
     raws: list[RawPhrase] = []
+    seen: set[str] = set()
     for name in args.sources:
         fn = _load_source(name)
         before = len(raws)
-        raws.extend(fn())
-        print(f"[source] {name}: +{len(raws) - before}", file=sys.stderr)
+        dropped_dup = 0
+        for p in fn():
+            if p.text in seen:
+                dropped_dup += 1
+                continue
+            seen.add(p.text)
+            raws.append(p)
+        added = len(raws) - before
+        if dropped_dup:
+            print(
+                f"[source] {name}: +{added}  (skipped {dropped_dup} "
+                f"already-covered text)",
+                file=sys.stderr,
+            )
+        else:
+            print(f"[source] {name}: +{added}", file=sys.stderr)
     print(f"[source] total raw: {len(raws)}", file=sys.stderr)
 
     # Enrich with phonology + POS
