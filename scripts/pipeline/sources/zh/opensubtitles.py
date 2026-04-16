@@ -23,9 +23,17 @@ from pathlib import Path
 from typing import Iterator
 
 import requests
+from opencc import OpenCC
 
 from ...types import RawPhrase
 from ._ngram_extractor import mine_ngrams
+
+# zh_cn.txt.gz from OPUS is predominantly simplified but has some partial
+# traditional-character lines from movies released in HK/TW. Normalize
+# every line to simplified before n-gram counting so that '什麼時候' and
+# '什么时候' end up in the same bucket (instead of as two half-frequency
+# entries that never reach min_count).
+_cc_t2s = OpenCC("t2s")
 
 
 SOURCE_NAME = "opensubtitles-zh"
@@ -80,10 +88,14 @@ def _ensure_cache() -> Path:
 
 
 def _iter_lines(path: Path) -> Iterator[str]:
-    """Stream-read the gzipped text file line by line."""
+    """Stream-read the gzipped text file line by line, normalizing 繁→简."""
     with gzip.open(path, "rt", encoding="utf-8", errors="ignore") as f:
         for line in f:
-            yield line.strip()
+            s = line.strip()
+            if not s:
+                continue
+            # Normalize traditional → simplified so 什麼時候 ≡ 什么时候.
+            yield _cc_t2s.convert(s)
 
 
 def iter_phrases(
