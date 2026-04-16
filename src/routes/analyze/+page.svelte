@@ -156,6 +156,17 @@
     analysis.lines.filter((l) => l.internalGroups.size > 0).length
   );
 
+  // ── Hover highlight: when user hovers a syllable, highlight all
+  // syllables with the same rhyme key across all lines.
+  let hoveredKey = $state<string | null>(null);
+
+  function onSylHover(lineIndex: number, sylIndex: number) {
+    hoveredKey = analysis.lines[lineIndex]?.keys[sylIndex] || null;
+  }
+  function onSylLeave() {
+    hoveredKey = null;
+  }
+
   function presetExample(t: string) {
     text = t;
   }
@@ -311,9 +322,15 @@
               {/if}
               <div class="flex flex-wrap gap-1.5 font-mono text-xs">
                 {#each line.syllables as syl, i (i)}
+                  {@const key = line.keys[i] || ''}
+                  {@const isHoverMatch = hoveredKey !== null && key === hoveredKey}
                   <span
-                    class="rounded px-1.5 py-1 {chipClass(line.index, i)}"
-                    title="{syl.char} · {syl.pinyinWithTone} · {line.keys[i] || '?'}"
+                    class="rounded px-1.5 py-1 cursor-default transition-all duration-100
+                      {chipClass(line.index, i)}
+                      {isHoverMatch ? 'scale-110 shadow-md brightness-110 z-10' : ''}"
+                    title="{syl.char} · {syl.pinyinWithTone} · {key || '?'}"
+                    onmouseenter={() => onSylHover(line.index, i)}
+                    onmouseleave={onSylLeave}
                   >
                     <span class="font-sans text-sm">{syl.char}</span>
                     <span class="ml-1 opacity-70">{syl.final}</span>
