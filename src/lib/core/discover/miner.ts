@@ -129,11 +129,13 @@ function scoreCluster(
   }
   const avgQuality = qSum / members.length;
 
-  // Domain diversity: more distinct tags = higher. Strip freq:N debug
-  // tags (each opensubs member carries a unique freq:NNN which inflated
-  // diversity unfairly — 12 "tags" vs idiom's 2).
-  const semanticTags = distinctTags.filter((t) => !t.startsWith('freq:'));
-  const diversity = Math.min(semanticTags.length, 5) / 5;
+  // Source diversity: count distinct source values across members.
+  // A cluster mixing idioms + rap lyrics + pop is more interesting
+  // than one that's all pop-lyrics fragments.
+  const sources = new Set<string>();
+  for (const m of members) sources.add(lexicon.phrases[m.phraseId].source);
+  // 1 source → 0.3, 2 → 0.6, 3+ → 1.0
+  const diversity = Math.min(sources.size, 3) / 3;
 
   // Mild depth nudge — deeper rhymes get a small bonus but DON'T
   // dominate. A great 2-push (q=0.95) beats a mediocre 4-push (q=0.7).

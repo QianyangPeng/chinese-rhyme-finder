@@ -48,6 +48,15 @@ _CONTENT_POS = frozenset({
 # Edge particles that ruin phrase boundaries.
 _EDGE_PARTICLES = set("的了啊呢吗呀哦哈嗯啦哒噢喔嘛")
 
+# Start words that indicate a mid-sentence fragment, not a standalone phrase.
+_FRAGMENT_STARTS = set(
+    "就也都还比像却并且而但不没让把被给"
+    "会能该要想得可在从向往到对跟同和"
+)
+
+# End words that indicate dialect/interjection fragments.
+_FRAGMENT_ENDS = set("嗷咧喔嘞咯噻哟唷呗咩嘢佬")
+
 
 # ---------------------------------------------------------------------------
 # Quality scoring
@@ -81,6 +90,14 @@ def _score_fragment(text: str) -> float:
 
     # Base score: lyrics get a generous base
     score = 0.75
+
+    # Fragment detection: starts with conjunction/adverb → mid-sentence cut
+    if text[0] in _FRAGMENT_STARTS:
+        score -= 0.2
+
+    # Fragment detection: ends with dialect/interjection particle
+    if text[-1] in _FRAGMENT_ENDS:
+        score -= 0.15
 
     # Content density bonus
     score += content_ratio * 0.15  # max +0.15 at 100% content
