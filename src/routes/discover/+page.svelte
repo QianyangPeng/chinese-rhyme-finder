@@ -400,6 +400,10 @@
         <option value={2}>2 押</option>
         <option value={3}>3 押</option>
         <option value={4}>4 押</option>
+        <option value={5}>5 押</option>
+        <option value={6}>6 押</option>
+        <option value={7}>7 押</option>
+        <option value={8}>8 押</option>
       </select>
     </div>
     <div>
