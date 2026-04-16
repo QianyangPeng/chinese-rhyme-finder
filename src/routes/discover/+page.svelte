@@ -31,7 +31,8 @@
     'xinhua-xiehouyu':     { label: '歇后', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200' },
     'chinese-poetry/tang': { label: '唐诗', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' },
     'chinese-poetry/song': { label: '宋词', cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200' },
-    'wiktionary-slang':    { label: '网络', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' }
+    'wiktionary-slang':    { label: '网络', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' },
+    'opensubtitles-zh':    { label: '口语', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200' }
   };
 
   function sourceBadge(source: string): { label: string; cls: string } {
@@ -213,44 +214,68 @@
   }
 
   /**
-   * Collapse "template-filler" duplication inside a cluster. When a cluster
-   * has many members that share the same FIRST word + POS sequence (e.g.
-   * `什么意思 / 什么关系 / 什么感觉 / 什么玩意` — all `r + n` starting with
-   * `什么`), they're not discovery — they're just slot-fillers of one
-   * attested template. Keep at most `maxPerGroup` per (first-word, POS-seq)
-   * bucket, preferring higher quality.
+   * Collapse template-filler duplication inside a cluster. Two grouping
+   * signals, a member is shelved if EITHER fires:
    *
-   * Clusters with diverse first-words (`星辰大海 / 古道西风 / 江山万里`) are
-   * untouched because each member is its own group of size 1.
+   *   1. **Identical tail** (same last N chars, where N = cluster.patternLength).
+   *      This catches `...什么名字` variants (`叫什么名字`, `你叫什么名字`,
+   *      `他叫什么名字`…) and `...来的时候` variants — all share the exact
+   *      same rhyming anchor text, only differ in optional prefix.
+   *
+   *   2. **First-word + POS pattern** (old signal).
+   *      Catches `不会X`, `没有X`, `可以X` families where the prefix is the
+   *      same small verb/particle but the tail word varies.
+   *
+   * Members survive if they're in a singleton group under both signals.
+   * Top `maxPerGroup` by quality kept per group.
    */
   function stemDedupe(
     members: readonly { phraseId: number; tailOffset: number }[],
     lexiconRef: readonly PhraseRecord[],
+    patternLength: number,
     maxPerGroup = 2
   ): { visible: typeof members; collapsed: number } {
-    const groups = new Map<string, { phraseId: number; tailOffset: number }[]>();
+    type M = { phraseId: number; tailOffset: number };
+    const byTail = new Map<string, M[]>();
+    const byHead = new Map<string, M[]>();
     for (const m of members) {
       const phrase = lexiconRef[m.phraseId];
-      const firstSeg = phrase.segments?.[0]?.text ?? [...phrase.text][0] ?? '';
+      const chars = [...phrase.text];
+
+      // Signal 1: literal tail string of length patternLength. Members of
+      // the same cluster necessarily rhyme on these positions, so when the
+      // LITERAL characters also coincide, they're template variants.
+      const tailKey = chars.slice(Math.max(0, chars.length - patternLength)).join('');
+
+      // Signal 2: first segment text + POS skeleton.
+      const firstSeg = phrase.segments?.[0]?.text ?? chars[0] ?? '';
       const pos = phrase.segments?.map((s) => s.pos).join('|') ?? 'nosegs';
-      const key = `${firstSeg}::${pos}`;
-      let g = groups.get(key);
-      if (!g) {
-        g = [];
-        groups.set(key, g);
-      }
+      const headKey = `${firstSeg}::${pos}`;
+
+      let g = byTail.get(tailKey);
+      if (!g) { g = []; byTail.set(tailKey, g); }
+      g.push(m);
+
+      g = byHead.get(headKey);
+      if (!g) { g = []; byHead.set(headKey, g); }
       g.push(m);
     }
+
     const hidden = new Set<number>();
-    for (const group of groups.values()) {
-      if (group.length <= maxPerGroup) continue;
-      const sorted = [...group].sort(
-        (a, b) => lexiconRef[b.phraseId].quality - lexiconRef[a.phraseId].quality
-      );
-      for (let i = maxPerGroup; i < sorted.length; i++) {
-        hidden.add(sorted[i].phraseId);
+    const processGroups = (groups: Iterable<M[]>) => {
+      for (const group of groups) {
+        if (group.length <= maxPerGroup) continue;
+        const sorted = [...group].sort(
+          (a, b) => lexiconRef[b.phraseId].quality - lexiconRef[a.phraseId].quality
+        );
+        for (let i = maxPerGroup; i < sorted.length; i++) {
+          hidden.add(sorted[i].phraseId);
+        }
       }
-    }
+    };
+    processGroups(byTail.values());
+    processGroups(byHead.values());
+
     if (hidden.size === 0) {
       return { visible: members, collapsed: 0 };
     }
@@ -529,7 +554,7 @@
   {:else}
     <div class="space-y-3">
       {#each catalog.clusters as cluster (cluster.id)}
-        {@const deduped = stemDedupe(cluster.members, catalog.lexiconRef)}
+        {@const deduped = stemDedupe(cluster.members, catalog.lexiconRef, cluster.patternLength)}
         <article class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <header class="mb-3 flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
