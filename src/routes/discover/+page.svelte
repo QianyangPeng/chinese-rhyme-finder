@@ -176,23 +176,19 @@
     getFilteredLexicon(lexicon, enabledSources)
   );
 
-  // Mine clusters with deferred computation so the UI can show a spinner.
+  // ── Deferred mining ────────────────────────────────────────────────
   // mineClusters is synchronous and blocks the main thread for 2-4s on
-  // 100k+ lexicons. Using $effect + setTimeout(0) lets the spinner
-  // paint before the heavy work begins.
-  let rawCatalog = $state(
-    mineClusters(getCurrentLexicon(), scheme, {
-      minPatternLength: minDepth,
-      minMembers,
-      tailOnly,
-      toneMode,
-      maxClusters: 8000
-    })
-  );
-  let miningInProgress = $state(false);
+  // 100k+ lexicons. We MUST NOT run it during component construction
+  // (before DOM exists) — otherwise the page is blank for seconds with
+  // no spinner visible.
+  //
+  // Instead: start with null catalog + miningInProgress=true. The $effect
+  // defers the heavy computation via double-rAF so the spinner renders
+  // on the very first frame. User sees spinner immediately on tab switch.
+  let rawCatalog = $state<ReturnType<typeof mineClusters> | null>(null);
+  let miningInProgress = $state(true);
 
   $effect(() => {
-    // Track all dependencies that trigger re-mining.
     const lex = activeLexicon;
     const depth = minDepth;
     const members = minMembers;
@@ -200,18 +196,22 @@
     const tone = toneMode;
 
     miningInProgress = true;
-    // Defer with double-rAF so the spinner actually paints + animates
-    // before the synchronous miner blocks the main thread.
-    const timer = setTimeout(() => { requestAnimationFrame(() => { requestAnimationFrame(() => {
-      rawCatalog = mineClusters(lex, scheme, {
-        minPatternLength: depth,
-        minMembers: members,
-        tailOnly: tail,
-        toneMode: tone,
-        maxClusters: 8000
+    // Double-rAF: first rAF schedules the paint (spinner visible),
+    // second rAF runs after that paint, then we start the heavy work.
+    const timer = setTimeout(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          rawCatalog = mineClusters(lex, scheme, {
+            minPatternLength: depth,
+            minMembers: members,
+            tailOnly: tail,
+            toneMode: tone,
+            maxClusters: 8000
+          });
+          miningInProgress = false;
+        });
       });
-      miningInProgress = false;
-    }); }); }, 0);
+    }, 0);
     return () => clearTimeout(timer);
   });
 
@@ -294,11 +294,15 @@
    *  everything down to 1 visible member are dropped — no discovery value. */
   const catalog = $derived(
     (() => {
+      // null while initial mining is in progress — spinner is showing.
+      if (!rawCatalog) {
+        return { clusters: [] as any[], lexiconRef: [] as any[], _deduped: new Map() };
+      }
+
       const input = lens === 'saved'
         ? rawCatalog.clusters.filter((c) => favorites.has(c.id))
         : rawCatalog.clusters;
 
-      // Apply stemDedupe to each cluster, then filter by visible >= minMembers.
       const withDedup = input
         .map((cluster) => ({
           cluster,
@@ -309,7 +313,6 @@
       return {
         ...rawCatalog,
         clusters: withDedup.slice(0, 200).map(({ cluster }) => cluster),
-        // Stash dedup results so render doesn't recompute.
         _deduped: new Map(withDedup.slice(0, 200).map(({ cluster, deduped }) => [cluster.id, deduped]))
       };
     })()
