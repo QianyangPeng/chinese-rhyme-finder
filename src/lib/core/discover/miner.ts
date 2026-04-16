@@ -133,24 +133,54 @@ function scoreCluster(
   // shouldn't overshadow tighter ones with 4 sharp members).
   const memberBonus = Math.min(members.length, 8) / 8;
 
-  // ── Tail diversity ────────────────────────────────────────────────
-  // Count how many DISTINCT tail texts exist across members (each tail
-  // is the last `patternLength` characters). Members necessarily rhyme
-  // on these positions, but when the *literal characters* also match,
-  // they're prefix-variations of one phrase — not discovery.
+  // ── Diversity penalties ─────────────────────────────────────────────
   //
-  //   tailDiv = 1.0  → every member has a unique tail → creative cluster
-  //   tailDiv = 1/N  → all N share one tail → template filler
+  // Two levels of tail-sameness detection:
   //
-  // Floor at 0.15 so even boring clusters survive at low rank rather
-  // than disappearing entirely.
+  // 1. CHAR-LEVEL tail: last K literal characters (K = patternLength).
+  //    Catches "叫什么名字 / 你叫什么名字 / 他叫什么名字" (all share
+  //    exact "什么名字" as tail text).
+  //
+  // 2. WORD-LEVEL last segment: the last jieba token (via phrase.segments).
+  //    Catches "活着的时候 / 开车的时候 / 唱歌的时候" — their last-4 chars
+  //    differ ('着的时候' vs '车的时候') but the meaningful last WORD is
+  //    the same: '时候'. Same for X先生, X自己, X意思 patterns.
+  //
+  // We take the MINIMUM of the two diversity ratios to penalize clusters
+  // that are template-like on either dimension.
+
   const tailTexts = new Set<string>();
+  const lastSegTexts = new Set<string>();
   for (const m of members) {
-    const text = lexicon.phrases[m.phraseId].text;
-    const chars = [...text];
+    const phrase = lexicon.phrases[m.phraseId];
+    const chars = [...phrase.text];
     tailTexts.add(chars.slice(Math.max(0, chars.length - patternLength)).join(''));
+
+    // Last content segment (skip trailing function words like 的/了/啊).
+    const segs = phrase.segments;
+    if (segs && segs.length > 0) {
+      // Walk backwards to find the last non-particle segment.
+      let lastSeg = segs[segs.length - 1].text;
+      for (let si = segs.length - 1; si >= 0; si--) {
+        const pos = segs[si].pos;
+        // Skip pure function words: particles (u*), auxiliaries (y),
+        // modal (e), interjections (o), punctuation (x), conjunctions (c)
+        if (!'uyeoxc'.includes(pos[0])) {
+          lastSeg = segs[si].text;
+          break;
+        }
+      }
+      lastSegTexts.add(lastSeg);
+    } else {
+      // No segments (seed entries) — use last 2 chars as proxy.
+      lastSegTexts.add(chars.slice(-2).join(''));
+    }
   }
-  const tailDiv = Math.max(tailTexts.size / members.length, 0.15);
+
+  const charTailDiv = tailTexts.size / members.length;
+  const segTailDiv = lastSegTexts.size / members.length;
+  // Use the harsher of the two signals, floored at 0.12.
+  const tailDiv = Math.max(Math.min(charTailDiv, segTailDiv), 0.12);
 
   return avgQuality * (0.5 + diversity) * lengthBonus * memberBonus * tailDiv;
 }
