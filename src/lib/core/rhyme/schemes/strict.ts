@@ -51,7 +51,7 @@ const RHYME_BODY: Record<string, string> = {
   'ie':   'ê',    // 夜 does NOT rhyme with 歌 (different vowel quality)
   'iao':  'ao',   // 笑 rhymes with 高
   'iou':  'ou',   // 牛 rhymes with 头
-  'ian':  'an',   // 天 rhymes with 山
+  'ian':  'ên',   // 天[iɛn] does NOT rhyme with 山[an] — vowel fronts before -n
   'in':   'in',   // 心: i is nucleus here (no medial)
   'iang': 'ang',  // 江 rhymes with 光
   'ing':  'ing',  // 星: i is nucleus here
@@ -69,7 +69,7 @@ const RHYME_BODY: Record<string, string> = {
 
   // ── ü-medial → strip ü ──
   'üe':   'ê',    // 月 does NOT rhyme with 歌 (same treatment as ie)
-  'üan':  'an',   // 圆 rhymes with 山
+  'üan':  'ên',   // 圆[yɛn] groups with 天[iɛn], NOT 山[an]
   'ün':   'ün',   // 军: ü is nucleus here (no medial)
 };
 
