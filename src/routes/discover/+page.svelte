@@ -27,7 +27,9 @@
     'chinese-poetry/tang': { label: '唐诗', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' },
     'chinese-poetry/song': { label: '宋词', cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200' },
     'wiktionary-slang':    { label: '网络', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' },
-    'opensubtitles-zh':    { label: '口语', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200' }
+    'opensubtitles-zh':    { label: '口语', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200' },
+    'lyrics-hiphop':       { label: '说唱', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' },
+    'lyrics-pop':          { label: '歌词', cls: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-200' }
   };
 
   function sourceBadge(source: string): { label: string; cls: string } {
@@ -73,6 +75,8 @@
     { id: 'xinhua-idiom',        label: '成语', defaultOn: true },
     { id: 'opensubtitles-zh',    label: '口语', defaultOn: true },
     { id: 'wiktionary-slang',    label: '网络', defaultOn: true },
+    { id: 'lyrics-hiphop',       label: '说唱', defaultOn: true },
+    { id: 'lyrics-pop',          label: '歌词', defaultOn: true },
     { id: 'seed-v1',             label: '精选', defaultOn: true },
     { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: false },
     { id: 'chinese-poetry/song', label: '宋词', defaultOn: false },
@@ -305,7 +309,7 @@
 </script>
 
 <svelte:head>
-  <title>Discover · 中文押韵发现</title>
+  <title>Discover · 世界最强押韵</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">

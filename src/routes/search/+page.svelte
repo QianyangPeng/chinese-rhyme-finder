@@ -120,7 +120,7 @@
 </script>
 
 <svelte:head>
-  <title>查找押韵 · 中文押韵发现</title>
+  <title>查找押韵 · 世界最强押韵</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">

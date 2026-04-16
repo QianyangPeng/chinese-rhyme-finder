@@ -47,15 +47,19 @@ from .types import (
 # ---------------------------------------------------------------------------
 
 SOURCE_REGISTRY: dict[str, str] = {
+    # ── Curated sources (no freq threshold, every entry is intentional) ──
     "zh:xinhua_idiom":     "pipeline.sources.zh.xinhua_idiom",
     "zh:xiehouyu":         "pipeline.sources.zh.xiehouyu",
     "zh:poetry_tang":      "pipeline.sources.zh.poetry_tang",
     "zh:poetry_song":      "pipeline.sources.zh.poetry_song",
     "zh:wiktionary_slang": "pipeline.sources.zh.wiktionary_slang",
+    # ── Lyrics (high creative density, MIT licensed) ─────────────────────
+    "zh:lyrics_hiphop":    "pipeline.sources.zh.lyrics_hiphop",
+    "zh:lyrics_pop":       "pipeline.sources.zh.lyrics_pop",
+    # ── Large-corpus mining (freq-based extraction) ──────────────────────
     "zh:opensubtitles":    "pipeline.sources.zh.opensubtitles",
     # Future:
-    # "zh:weibo_dump":       "pipeline.sources.zh.weibo_dump",
-    # "zh:wiki_intros":      "pipeline.sources.zh.wiki_intros",
+    # "zh:danmaku":          "pipeline.sources.zh.danmaku",
     # "en:opensubtitles":    "pipeline.sources.en.opensubtitles",
 }
 

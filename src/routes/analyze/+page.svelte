@@ -121,7 +121,7 @@
 </script>
 
 <svelte:head>
-  <title>反向分析 · 中文押韵发现</title>
+  <title>反向分析 · 世界最强押韵</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">

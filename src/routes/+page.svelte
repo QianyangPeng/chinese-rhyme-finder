@@ -1,26 +1,9 @@
 <script lang="ts">
-  import { parseSyllables } from '$lib/core/pinyin';
-  import { ALL_SCHEMES, matchFull, strictScheme } from '$lib/core/rhyme';
-  import type { Syllable } from '$lib/core/pinyin';
   import { getCurrentLexicon, ensureExtendedLexicon } from '$lib/core/corpus';
-  import { mineClusters } from '$lib/core/discover';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
 
-  // Stats are reactive — start with seed numbers, swap in big-lexicon
-  // numbers once the async fetch completes. Use maxClusters=Infinity
-  // here because this is a headline stat, not a render list.
   let lexicon = $state(getCurrentLexicon());
-  const clusterCount = $derived(
-    mineClusters(lexicon, strictScheme, { maxClusters: Infinity }).clusters.length
-  );
-  const STATS = $derived({
-    phrases: lexicon.phrases.length,
-    clusters: clusterCount,
-    // Only 严式 scheme surfaced in UI; "严格度" refers to tone toggle
-    // (韵母 / 韵母+声调). Keep the number honest.
-    schemes: 2
-  });
 
   onMount(() => {
     ensureExtendedLexicon(base).then((lex) => {
@@ -28,308 +11,204 @@
     });
   });
 
-  // Two phrases to analyze. Defaults are the canonical Capper example
-  // ("姜维的戏" vs "降维打击") that motivated the whole project — they show
-  // off how a 1-position-relaxed match works under different schemes.
-  let phraseA = $state('姜维的戏');
-  let phraseB = $state('降维打击');
-
-  const sylsA = $derived(parseSyllables(phraseA));
-  const sylsB = $derived(parseSyllables(phraseB));
-
-  const finalsA = $derived(sylsA.map((s) => s.final));
-  const finalsB = $derived(sylsB.map((s) => s.final));
-
-  // For each scheme, compute the match (or null if length mismatch).
-  const comparisons = $derived(
-    ALL_SCHEMES.map((scheme) => ({
-      scheme,
-      match: matchFull(finalsA, finalsB, scheme),
-      keysA: sylsA.map((s) => scheme.keyOf(s.final)),
-      keysB: sylsB.map((s) => scheme.keyOf(s.final))
-    }))
+  // Compute per-source counts from the loaded lexicon.
+  const sourceCounts = $derived(
+    (() => {
+      const counts: Record<string, number> = {};
+      for (const p of lexicon.phrases) {
+        counts[p.source] = (counts[p.source] || 0) + 1;
+      }
+      return counts;
+    })()
   );
 
-  function presetExample(a: string, b: string) {
-    phraseA = a;
-    phraseB = b;
-  }
+  const totalPhrases = $derived(lexicon.phrases.length);
 
-  function syllableLabel(s: Syllable): string {
-    return [s.initial, s.final].filter(Boolean).join(' · ');
-  }
+  // Source metadata for the dashboard cards.
+  const SOURCES: Array<{
+    id: string;
+    label: string;
+    desc: string;
+    color: string;
+    license: string;
+  }> = [
+    {
+      id: 'xinhua-idiom',
+      label: '成语',
+      desc: '新华成语词典 — 四字经典，千年积淀',
+      color: 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30',
+      license: 'MIT'
+    },
+    {
+      id: 'opensubtitles-zh',
+      label: '口语',
+      desc: 'OpenSubtitles 电影字幕 — 1600万行对白中挖出的现代口语',
+      color: 'border-cyan-300 bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/30',
+      license: 'CC-BY-ND'
+    },
+    {
+      id: 'lyrics-hiphop',
+      label: '说唱歌词',
+      desc: '70+ 位中文说唱歌手的歌词 — 最高创意密度的押韵素材',
+      color: 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30',
+      license: 'MIT'
+    },
+    {
+      id: 'lyrics-pop',
+      label: '流行歌词',
+      desc: '500+ 歌手、5万首歌 — 流行/摇滚/民谣/R&B',
+      color: 'border-pink-300 bg-pink-50 dark:border-pink-800 dark:bg-pink-950/30',
+      license: 'MIT'
+    },
+    {
+      id: 'xinhua-xiehouyu',
+      label: '歇后语',
+      desc: '新华歇后语答案 — 民间智慧，口语化意象',
+      color: 'border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/30',
+      license: 'MIT'
+    },
+    {
+      id: 'chinese-poetry/tang',
+      label: '唐诗',
+      desc: '唐诗三百首 — 古典韵律的源头',
+      color: 'border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/30',
+      license: 'MIT'
+    },
+    {
+      id: 'chinese-poetry/song',
+      label: '宋词',
+      desc: '宋词三百首 — 婉约与豪放',
+      color: 'border-indigo-300 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/30',
+      license: 'MIT'
+    },
+    {
+      id: 'wiktionary-slang',
+      label: '网络用语',
+      desc: '维基词典收录的汉语网络流行语',
+      color: 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30',
+      license: 'CC-BY-SA'
+    },
+    {
+      id: 'seed-v1',
+      label: '精选',
+      desc: '手工挑选的现代短语 — 降维打击、知识图谱、相对华丽…',
+      color: 'border-zinc-300 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/30',
+      license: 'MIT'
+    }
+  ];
 </script>
 
 <svelte:head>
-  <title>中文押韵发现 · chinese-rhyme-finder</title>
+  <title>世界最强押韵网站</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
-  <header class="mb-8">
-    <h1 class="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-      中文押韵发现
+  <!-- Hero -->
+  <header class="mb-10 text-center">
+    <h1 class="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
+      世界最强押韵网站
     </h1>
-    <p class="mt-3 text-lg text-zinc-600 dark:text-zinc-400">不是字典，是灵感引擎。</p>
+    <p class="mt-4 text-lg text-zinc-600 dark:text-zinc-400">
+      {totalPhrases.toLocaleString()} 条中文短语，来自 {SOURCES.length} 个开源语料库。
+      从成语到说唱歌词，从唐诗到弹幕 — 算法挖掘一切押韵可能。
+    </p>
+    <div class="mt-6 flex flex-wrap justify-center gap-3">
+      <a
+        href="{base}/discover/"
+        class="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-semibold text-white shadow hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      >
+        Discover · 灵感发现
+      </a>
+      <a
+        href="{base}/search/"
+        class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-6 py-2.5 text-sm font-semibold text-zinc-700 dark:text-zinc-300 shadow hover:bg-zinc-50 dark:hover:bg-zinc-800"
+      >
+        Search · 查找押韵
+      </a>
+      <a
+        href="{base}/analyze/"
+        class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-6 py-2.5 text-sm font-semibold text-zinc-700 dark:text-zinc-300 shadow hover:bg-zinc-50 dark:hover:bg-zinc-800"
+      >
+        Analyze · 反向分析
+      </a>
+    </div>
   </header>
 
-  <!-- Live stats row — quick signal of how alive the lexicon is right now. -->
-  <section class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
-      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">词条</p>
-      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.phrases}</p>
-    </div>
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
-      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">押韵 cluster</p>
-      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.clusters}</p>
-    </div>
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
-      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">押韵严格度</p>
-      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{STATS.schemes}</p>
-    </div>
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3">
-      <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">单元测试</p>
-      <p class="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">126</p>
-    </div>
-  </section>
-
-  <!-- Status banner -->
-  <section class="mb-8 rounded-lg border border-emerald-200 bg-emerald-50 p-5">
-    <p class="font-mono text-xs uppercase tracking-wider text-emerald-700">
-      Status · Phase 1 MVP 闭环
-    </p>
-    <p class="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-      四个模式都跑通了：
-      <a href="{base}/discover" class="font-semibold text-emerald-800 underline">Discover</a> ·
-      <a href="{base}/search" class="font-semibold text-emerald-800 underline">Search</a> ·
-      <a href="{base}/analyze" class="font-semibold text-emerald-800 underline">Analyze</a> · 引擎实测（下方）。126 单元测试通过。
-      下一里程碑：Phase 1.4 Python 数据管道（爬取 + 清洗 + 质量打分 + 把词库扩到 50k+）。
-    </p>
-  </section>
-
-  <!-- Live engine demo -->
-  <section class="mb-12">
-    <h2 class="mb-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">引擎实测</h2>
-    <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-      输入两个词组，看引擎按音节拆韵母、按 3 个 scheme 判断押韵。
-    </p>
-
-    <!-- Preset buttons -->
-    <div class="mb-4 flex flex-wrap gap-2 text-xs">
-      <span class="text-zinc-500">试试：</span>
-      <button
-        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-        onclick={() => presetExample('姜维的戏', '降维打击')}
-      >
-        姜维的戏 / 降维打击
-      </button>
-      <button
-        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-        onclick={() => presetExample('星辰大海', '银河大队')}
-      >
-        星辰大海 / 银河大队
-      </button>
-      <button
-        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-        onclick={() => presetExample('原神芭芭拉', '哈哈哈哈哈')}
-      >
-        原神芭芭拉 / 哈哈哈哈哈
-      </button>
-      <button
-        class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-        onclick={() => presetExample('北京欢迎你', '南京见面礼')}
-      >
-        北京欢迎你 / 南京见面礼
-      </button>
-    </div>
-
-    <div class="grid gap-4 sm:grid-cols-2">
-      <label class="block">
-        <span class="text-xs uppercase tracking-wider text-zinc-500">输入 A</span>
-        <input
-          type="text"
-          bind:value={phraseA}
-          placeholder="输入一个中文短语"
-          class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-        />
-      </label>
-      <label class="block">
-        <span class="text-xs uppercase tracking-wider text-zinc-500">输入 B</span>
-        <input
-          type="text"
-          bind:value={phraseB}
-          placeholder="输入另一个中文短语对比"
-          class="mt-1 block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-        />
-      </label>
-    </div>
-
-    <!-- Per-phrase syllable breakdown -->
-    <div class="mt-6 grid gap-4 sm:grid-cols-2">
-      {#each [{ label: 'A', sylls: sylsA }, { label: 'B', sylls: sylsB }] as col (col.label)}
-        <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-          <p class="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-500">
-            {col.label} · {col.sylls.length} 音节
-          </p>
-          {#if col.sylls.length === 0}
-            <p class="text-sm text-zinc-400">（无中文音节）</p>
-          {:else}
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left text-xs text-zinc-500">
-                  <th class="py-1">字</th>
-                  <th class="py-1">拼音</th>
-                  <th class="py-1">韵母</th>
-                  <th class="py-1">声调</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each col.sylls as s, i (i)}
-                  <tr class="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
-                    <td class="py-1.5 text-base">{s.char}</td>
-                    <td class="py-1.5 font-mono text-zinc-700 dark:text-zinc-300">
-                      {s.pinyinWithTone}
-                    </td>
-                    <td class="py-1.5 font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                      {s.final}
-                    </td>
-                    <td class="py-1.5 font-mono text-zinc-600 dark:text-zinc-400">
-                      {s.tone > 0 ? s.tone : '轻'}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {/if}
+  <!-- Data sources dashboard -->
+  <section class="mb-10">
+    <h2 class="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-100">
+      语料数据源
+    </h2>
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {#each SOURCES as src (src.id)}
+        {@const count = sourceCounts[src.id] ?? 0}
+        <div class="rounded-lg border {src.color} p-4">
+          <div class="flex items-baseline justify-between">
+            <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">{src.label}</h3>
+            <span class="font-mono text-lg font-bold text-zinc-900 dark:text-zinc-100">
+              {count > 0 ? count.toLocaleString() : '—'}
+            </span>
+          </div>
+          <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{src.desc}</p>
+          <p class="mt-1 font-mono text-[10px] text-zinc-400">{src.license}</p>
         </div>
       {/each}
     </div>
+    <p class="mt-3 text-right text-sm text-zinc-500">
+      合计 <span class="font-bold text-zinc-900 dark:text-zinc-100">{totalPhrases.toLocaleString()}</span> 条
+    </p>
+  </section>
 
-    <!-- Cross-scheme comparison -->
-    <div class="mt-6 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-      <p class="mb-3 font-mono text-xs uppercase tracking-wider text-zinc-500">
-        押韵对比
-      </p>
-
-      {#if sylsA.length === 0 || sylsB.length === 0}
-        <p class="text-sm text-zinc-500">两侧都需至少一个中文音节。</p>
-      {:else if sylsA.length !== sylsB.length}
-        <p class="text-sm text-amber-700">
-          长度不同（{sylsA.length} vs {sylsB.length} 音节）。FULL 模式需等长 ——
-          后续 Search 模式会按尾对齐 / 头对齐处理。
+  <!-- How it works -->
+  <section class="mb-10">
+    <h2 class="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-100">工作原理</h2>
+    <div class="grid gap-4 sm:grid-cols-3">
+      <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+        <p class="text-2xl">1</p>
+        <p class="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">拼音分解</p>
+        <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+          每个汉字 → 声母 + 韵母 + 声调。支持 apical-i 区分（只/zhi ≠ 李/li）。
         </p>
-      {:else}
-        <div class="space-y-3">
-          {#each comparisons as { scheme, match, keysA, keysB } (scheme.id)}
-            <div class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
-              <div class="flex items-baseline justify-between">
-                <p class="text-sm font-semibold text-zinc-800">{scheme.name}</p>
-                {#if match}
-                  {#if match.isFullMatch}
-                    <span class="text-xs font-medium text-emerald-700">
-                      ✓ 全押 ({match.comparedLength}/{match.comparedLength})
-                    </span>
-                  {:else}
-                    <span class="text-xs font-medium text-amber-700">
-                      Level {match.relaxationLevel} · {match.matchedPositions
-                        .length}/{match.comparedLength} 押
-                    </span>
-                  {/if}
-                {/if}
-              </div>
-              {#if match}
-                <div class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs">
-                  <span class="text-zinc-500">A</span>
-                  <div class="flex flex-wrap gap-1.5">
-                    {#each keysA as k, i (i)}
-                      <span
-                        class="rounded px-1.5 py-0.5 {match.perPosition[i]
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : 'bg-rose-100 text-rose-900'}"
-                      >
-                        {k || '?'}
-                      </span>
-                    {/each}
-                  </div>
-                  <span class="text-zinc-500">B</span>
-                  <div class="flex flex-wrap gap-1.5">
-                    {#each keysB as k, i (i)}
-                      <span
-                        class="rounded px-1.5 py-0.5 {match.perPosition[i]
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : 'bg-rose-100 text-rose-900'}"
-                      >
-                        {k || '?'}
-                      </span>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
+      </div>
+      <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+        <p class="text-2xl">2</p>
+        <p class="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">韵母匹配</p>
+        <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+          多音节尾部对齐。2 押 = 最后两个韵母一致，4 押 = 最后四个。可选声调严格模式。
+        </p>
+      </div>
+      <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+        <p class="text-2xl">3</p>
+        <p class="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">聚类发现</p>
+        <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+          算法扫描全库，找出所有韵母匹配的短语组合。按巧妙度、多样性、尾部独特性排序。
+        </p>
+      </div>
     </div>
   </section>
 
-  <!-- Modes overview (kept short) -->
+  <!-- Tech stack -->
   <section class="mb-10">
-    <h2 class="mb-3 text-xl font-semibold text-zinc-900 dark:text-zinc-100">三种模式</h2>
-    <ul class="space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
-      <li>
-        <a
-          href="{base}/discover"
-          class="font-semibold text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:text-zinc-300"
-        >
-          🔥 Discover →
-        </a>
-        <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-700">就绪</span>
-        — 算法主动挖掘的押韵 cluster，按巧妙度排序（种子库版本，词库扩充后效果更显著）
-      </li>
-      <li>
-        <a
-          href="{base}/search"
-          class="font-semibold text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:text-zinc-300"
-        >
-          🔍 Search →
-        </a>
-        <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-700">就绪</span>
-        — 输入词组，分级宽松（严式 → 邻韵）查找押韵候选（内置 200+ 词条种子库）
-      </li>
-      <li>
-        <a
-          href="{base}/analyze"
-          class="font-semibold text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:text-zinc-300"
-        >
-          📖 Analyze →
-        </a>
-        <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-700">就绪</span>
-        — 粘贴歌词，反向分析押韵模式（多行间的 K 押深度 + 同韵分组）
-      </li>
-    </ul>
+    <h2 class="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-100">技术栈</h2>
+    <div class="flex flex-wrap gap-2 text-xs">
+      {#each ['SvelteKit 2', 'Svelte 5 (runes)', 'TypeScript', 'Tailwind CSS', 'Python (jieba + pypinyin + OpenCC)', 'GitHub Pages', 'MIT License'] as tag}
+        <span class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-zinc-700 dark:text-zinc-300">
+          {tag}
+        </span>
+      {/each}
+    </div>
   </section>
 
-  <footer class="mt-10 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
+  <!-- Footer -->
+  <footer class="border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
-        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
+        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:hover:text-zinc-100"
       >
         GitHub
       </a>
-      ·
-      <a
-        href="https://github.com/QianyangPeng/chinese-rhyme-finder/blob/main/docs/DECISIONS.md"
-        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
-      >
-        设计决策
-      </a>
-      ·
-      <a
-        href="https://github.com/QianyangPeng/chinese-rhyme-finder/blob/main/docs/ROADMAP.md"
-        class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100"
-      >
-        路线图
-      </a>
+      · 所有语料均来自开源 / CC 协议数据集 · 不使用 LLM 推理
     </p>
   </footer>
 </div>

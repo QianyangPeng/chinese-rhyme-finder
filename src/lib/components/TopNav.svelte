@@ -30,7 +30,7 @@
       href="{base}/"
       class="font-mono text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
     >
-      chinese-rhyme-finder
+      世界最强押韵
     </a>
     <ul class="flex flex-wrap items-center gap-1 text-xs">
       {#each LINKS as link (link.href)}
