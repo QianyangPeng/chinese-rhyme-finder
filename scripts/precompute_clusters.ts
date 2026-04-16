@@ -143,14 +143,15 @@ for (const depth of DEPTHS) {
       maxClusters: MAX_CLUSTERS,
     });
 
-    // Apply stemDedupe + minMembers on visible, take top 200.
+    // Apply stemDedupe + minMembers. Cap at 2000 — plenty for infinite
+    // scroll, keeps file sizes ~6MB (vs 24MB uncapped).
     const processed = catalog.clusters
       .map(cluster => {
         const deduped = stemDedupe(cluster.members, lexicon.phrases, cluster.patternLength);
         return { cluster, deduped };
       })
       .filter(({ deduped }) => deduped.visible.length >= MIN_MEMBERS)
-      .slice(0, 200);
+      .slice(0, 2000);
 
     // Denormalize: embed full phrase data in each member so browser
     // doesn't need the lexicon to render Discover.

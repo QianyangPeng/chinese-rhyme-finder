@@ -12,6 +12,20 @@
   import { onMount } from 'svelte';
   import { favorites } from '$lib/stores/favorites.svelte';
 
+  /** Svelte action: calls `callback` when element enters viewport. */
+  function observeIntersection(node: HTMLElement, callback: () => void) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) callback();
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(node);
+    return {
+      destroy() { observer.disconnect(); }
+    };
+  }
+
   // Simplified: just default (cleverness-sorted) or saved (favorites).
   // Lens tabs were removed — per-source toggles + depth selector give
   // users all the filtering they need without cognitive overhead.
@@ -250,6 +264,8 @@
   });
   let miningInProgress = $state(true);
   let usingPrecomputed = $state(false);
+  const PAGE_SIZE = 50;
+  let visibleCount = $state(PAGE_SIZE);
 
   $effect(() => {
     const depth = minDepth;
@@ -266,6 +282,7 @@
         .then((data) => {
           catalog = catalogFromPrecomputed(data);
           usingPrecomputed = true;
+          visibleCount = PAGE_SIZE;
           miningInProgress = false;
         })
         .catch(() => {
@@ -313,6 +330,7 @@
             lexiconRef: raw.lexiconRef,
             _deduped: new Map(withDedup.map(({ cluster, deduped }) => [cluster.id, deduped])),
           };
+          visibleCount = PAGE_SIZE;
           miningInProgress = false;
         });
       });
@@ -543,6 +561,9 @@
 
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
     找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{catalog.clusters.length}</span> 组 cluster
+    {#if catalog.clusters.length > visibleCount}
+      <span class="text-zinc-400">（显示前 {visibleCount}，向下滚动加载更多）</span>
+    {/if}
   </p>
 
   <!-- Cluster cards -->
@@ -564,7 +585,7 @@
     </div>
   {:else}
     <div class="space-y-3">
-      {#each catalog.clusters as cluster (cluster.id)}
+      {#each catalog.clusters.slice(0, visibleCount) as cluster (cluster.id)}
         {@const deduped = catalog._deduped?.get(cluster.id) ?? { visible: cluster.members, collapsed: 0 }}
         <article class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <header class="mb-3 flex items-start justify-between gap-3">
@@ -685,6 +706,24 @@
           </ul>
         </article>
       {/each}
+
+      <!-- Infinite scroll sentinel -->
+      {#if visibleCount < catalog.clusters.length}
+        <div
+          class="flex items-center justify-center py-8 text-zinc-400"
+          use:observeIntersection={() => { visibleCount += PAGE_SIZE; }}
+        >
+          <div
+            class="h-5 w-5 rounded-full border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-500 dark:border-t-zinc-400"
+            style="animation: spin 0.7s linear infinite"
+          ></div>
+          <span class="ml-2 text-xs">加载更多（{visibleCount}/{catalog.clusters.length}）</span>
+        </div>
+      {:else if catalog.clusters.length > PAGE_SIZE}
+        <p class="py-6 text-center text-xs text-zinc-400">
+          全部 {catalog.clusters.length} 组已显示
+        </p>
+      {/if}
     </div>
   {/if}
 
