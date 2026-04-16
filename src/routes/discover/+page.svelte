@@ -107,9 +107,12 @@
     if (onParam) for (const s of onParam.split(',')) enabledSources[s] = true;
     urlReady = true;
 
-    // Kick off incremental per-source loading. Each source that arrives
-    // triggers a re-render — user sees results grow progressively.
-    ensureExtendedLexicon(base);
+    // Only load the full lexicon if we need runtime mining (custom source
+    // config). For the default config, pre-computed clusters are sufficient
+    // — no need to download 120MB of source files.
+    if (!isDefaultSourceConfig()) {
+      ensureExtendedLexicon(base);
+    }
     const unsub = onLexiconUpdate((lex) => {
       lexicon = lex;
       loadedSourceCount++;
@@ -275,6 +278,8 @@
   });
 
   function doRuntimeMining() {
+    // Ensure lexicon is loaded when falling back to runtime mining.
+    ensureExtendedLexicon(base);
     const lex = activeLexicon;
     const depth = minDepth;
     const members = minMembers;
