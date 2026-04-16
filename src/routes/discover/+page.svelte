@@ -468,10 +468,10 @@
   <!-- Cluster cards -->
   {#if miningInProgress}
     <div class="flex flex-col items-center justify-center py-20 text-zinc-400">
-      <svg class="h-8 w-8 animate-spin" viewBox="0 0 24 24" fill="none">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-      </svg>
+      <div
+        class="h-8 w-8 rounded-full border-[3px] border-zinc-200 dark:border-zinc-700 border-t-zinc-600 dark:border-t-zinc-300"
+        style="animation: spin 0.7s linear infinite"
+      ></div>
       <p class="mt-3 text-sm">正在计算押韵组合…</p>
     </div>
   {:else if catalog.clusters.length === 0}

@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Spinner animation — defined globally so it works even if Tailwind's
+   animate-spin isn't included in the purged CSS bundle. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
