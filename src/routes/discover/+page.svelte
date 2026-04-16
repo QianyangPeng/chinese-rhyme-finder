@@ -171,44 +171,148 @@
     getFilteredLexicon(lexicon, enabledSources)
   );
 
-  // ── Deferred mining ────────────────────────────────────────────────
-  // mineClusters is synchronous and blocks the main thread for 2-4s on
-  // 100k+ lexicons. We MUST NOT run it during component construction
-  // (before DOM exists) — otherwise the page is blank for seconds with
-  // no spinner visible.
+  // ── Cluster loading: pre-computed (fast) or runtime mining (fallback) ──
   //
-  // Instead: start with null catalog + miningInProgress=true. The $effect
-  // defers the heavy computation via double-rAF so the spinner renders
-  // on the very first frame. User sees spinner immediately on tab switch.
-  let rawCatalog = $state<ReturnType<typeof mineClusters> | null>(null);
+  // Pre-computed cluster files exist for default source configs at each
+  // (depth, toneMode). When user's config matches → fetch small JSON
+  // (~500KB), render instantly. When user has custom source toggles →
+  // fall back to runtime miner with spinner.
+
+  const DEFAULT_ON_SOURCES = new Set(['xinhua-idiom', 'opensubtitles-zh', 'wiktionary-slang', 'lyrics-hiphop', 'lyrics-pop']);
+
+  function isDefaultSourceConfig(): boolean {
+    for (const toggle of SOURCE_TOGGLES) {
+      const shouldBeOn = DEFAULT_ON_SOURCES.has(toggle.id);
+      if (enabledSources[toggle.id] !== shouldBeOn) return false;
+    }
+    return tailOnly && minMembers === 3;
+  }
+
+  // Synthetic catalog shape that matches what runtime miner produces,
+  // built from pre-computed JSON so the render template works unchanged.
+  interface PrecomputedMember {
+    text: string;
+    source: string;
+    quality: number;
+    pinyinWithTone?: string[];
+    finals: string[];
+    segments?: { text: string; pos: string }[];
+    tailOffset: number;
+  }
+
+  function catalogFromPrecomputed(data: any) {
+    const phrases: PhraseRecord[] = [];
+    const clusters: any[] = [];
+    const dedupMap = new Map<string, { visible: any[]; collapsed: number }>();
+
+    for (const c of data.clusters) {
+      const memberRefs: { phraseId: number; tailOffset: number }[] = [];
+      for (const m of c.members as PrecomputedMember[]) {
+        const id = phrases.length;
+        phrases.push({
+          text: m.text,
+          source: m.source,
+          quality: m.quality,
+          length: [...m.text].filter(ch => /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)).length,
+          finals: m.finals,
+          pinyinWithTone: m.pinyinWithTone,
+          segments: m.segments,
+          tags: [],
+        });
+        memberRefs.push({ phraseId: id, tailOffset: m.tailOffset });
+      }
+      const cluster = {
+        id: c.id,
+        pattern: c.pattern,
+        patternLength: c.patternLength,
+        cleverness: c.cleverness,
+        distinctTags: c.distinctTags ?? [],
+        members: memberRefs,
+      };
+      clusters.push(cluster);
+      dedupMap.set(c.id, { visible: memberRefs, collapsed: c.collapsedCount ?? 0 });
+    }
+
+    return {
+      clusters,
+      lexiconRef: phrases,
+      _deduped: dedupMap,
+    };
+  }
+
+  let catalog = $state<{ clusters: any[]; lexiconRef: any[]; _deduped: Map<string, any> }>({
+    clusters: [],
+    lexiconRef: [],
+    _deduped: new Map(),
+  });
   let miningInProgress = $state(true);
+  let usingPrecomputed = $state(false);
 
   $effect(() => {
+    const depth = minDepth;
+    const tone = toneMode;
+    const defaultConfig = isDefaultSourceConfig();
+
+    miningInProgress = true;
+
+    if (defaultConfig) {
+      // Fast path: fetch pre-computed cluster file (~500KB).
+      const file = `${base}/data/clusters/depth-${depth}-tone-${tone}.json`;
+      fetch(file)
+        .then((r) => r.ok ? r.json() : Promise.reject('not found'))
+        .then((data) => {
+          catalog = catalogFromPrecomputed(data);
+          usingPrecomputed = true;
+          miningInProgress = false;
+        })
+        .catch(() => {
+          // Pre-computed file missing — fall back to runtime mining.
+          doRuntimeMining();
+        });
+    } else {
+      doRuntimeMining();
+    }
+  });
+
+  function doRuntimeMining() {
     const lex = activeLexicon;
     const depth = minDepth;
     const members = minMembers;
     const tail = tailOnly;
     const tone = toneMode;
 
-    miningInProgress = true;
-    // Double-rAF: first rAF schedules the paint (spinner visible),
-    // second rAF runs after that paint, then we start the heavy work.
-    const timer = setTimeout(() => {
+    usingPrecomputed = false;
+    // Defer with double-rAF so spinner renders before miner blocks.
+    setTimeout(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          rawCatalog = mineClusters(lex, scheme, {
+          const raw = mineClusters(lex, scheme, {
             minPatternLength: depth,
             minMembers: members,
             tailOnly: tail,
             toneMode: tone,
-            maxClusters: 8000
+            maxClusters: 8000,
           });
+
+          // Apply stemDedupe + minMembers check.
+          const withDedup = raw.clusters
+            .map((cluster) => ({
+              cluster,
+              deduped: stemDedupe(cluster.members, raw.lexiconRef, cluster.patternLength),
+            }))
+            .filter(({ deduped }) => deduped.visible.length >= minMembers)
+            .slice(0, 200);
+
+          catalog = {
+            clusters: withDedup.map(({ cluster }) => cluster),
+            lexiconRef: raw.lexiconRef,
+            _deduped: new Map(withDedup.map(({ cluster, deduped }) => [cluster.id, deduped])),
+          };
           miningInProgress = false;
         });
       });
     }, 0);
-    return () => clearTimeout(timer);
-  });
+  }
 
   // (Removed: specificTags, avgQuality, memberSources — lens tabs gone)
 
@@ -284,34 +388,8 @@
     };
   }
 
-  /** Catalog derivation: apply dedup per cluster, then enforce minMembers
-   *  on the VISIBLE count (not raw count). Clusters where dedup collapses
-   *  everything down to 1 visible member are dropped — no discovery value. */
-  const catalog = $derived(
-    (() => {
-      // null while initial mining is in progress — spinner is showing.
-      if (!rawCatalog) {
-        return { clusters: [] as any[], lexiconRef: [] as any[], _deduped: new Map() };
-      }
-
-      const input = lens === 'saved'
-        ? rawCatalog.clusters.filter((c) => favorites.has(c.id))
-        : rawCatalog.clusters;
-
-      const withDedup = input
-        .map((cluster) => ({
-          cluster,
-          deduped: stemDedupe(cluster.members, rawCatalog.lexiconRef, cluster.patternLength)
-        }))
-        .filter(({ deduped }) => deduped.visible.length >= minMembers);
-
-      return {
-        ...rawCatalog,
-        clusters: withDedup.slice(0, 200).map(({ cluster }) => cluster),
-        _deduped: new Map(withDedup.slice(0, 200).map(({ cluster, deduped }) => [cluster.id, deduped]))
-      };
-    })()
-  );
+  // catalog is now managed by the $effect above (pre-computed or runtime).
+  // For 'saved' lens, filter the existing catalog client-side.
 
   /** Render at most 5 stars based on cleverness (raw value rescaled). */
   function stars(cleverness: number): string {
