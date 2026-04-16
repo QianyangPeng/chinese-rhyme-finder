@@ -88,7 +88,13 @@ _SUBTITLE_ARTIFACTS = {
     "华文中宋", "华文楷体", "华文行楷", "微软雅黑",
     "宋体简体", "字幕组", "翻译", "校对", "压制", "特效",
     "人人影视", "破烂熊", "伊甸园",
+    # Specific high-frequency artifacts found in top clusters:
+    "字幕译制", "字幕翻译", "字幕制作",
 }
+
+# Honorific suffixes: when preceded by a person-name POS, the whole
+# phrase is just "ForeignName先生" — not useful rap vocabulary.
+_HONORIFIC_SUFFIXES = {"先生", "女士", "太太", "小姐", "夫人", "大人"}
 
 # Prune Counter every N lines to keep memory bounded: drop items with count=1.
 _PRUNE_EVERY = 500_000
@@ -190,6 +196,18 @@ def _is_phrasey(text: str, pos_seq: list[tuple[str, str]]) -> bool:
     # Subtitle format / credits metadata.
     if text in _SUBTITLE_ARTIFACTS:
         return False
+    # Repetitive-char gibberish: '不不不不', '哈哈哈哈' etc.
+    # If >50% of chars are the same single character, it's not a phrase.
+    from collections import Counter as _C
+    char_counts = _C(text)
+    if char_counts.most_common(1)[0][1] / len(text) > 0.5:
+        return False
+    # Honorific template: X先生/女士/太太 where X is a person name → skip.
+    if len(pos_seq) >= 2:
+        last_word = pos_seq[-1][0]
+        second_last_pos = pos_seq[-2][1]
+        if last_word in _HONORIFIC_SUFFIXES and second_last_pos in ("nr", "nrt", "ns", "nz"):
+            return False
     # No edge particles.
     if text[0] in _EDGE_PARTICLES or text[-1] in _EDGE_PARTICLES:
         return False
