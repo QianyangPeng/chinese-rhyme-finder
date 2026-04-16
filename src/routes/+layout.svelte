@@ -11,20 +11,17 @@
 <KeyboardHelp />
 <TopNav />
 
-<!-- Page-transition loading bar -->
+<!-- Page-transition overlay: covers old content during route switch -->
 {#if $navigating}
-  <div
-    class="fixed top-0 left-0 z-50 h-1 bg-zinc-900 dark:bg-zinc-100"
-    style="animation: loading-bar 1.5s ease-in-out infinite; width: 100%"
-  ></div>
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm">
+    <div class="flex flex-col items-center gap-3 text-zinc-500">
+      <div
+        class="h-8 w-8 rounded-full border-[3px] border-zinc-200 dark:border-zinc-700 border-t-zinc-600 dark:border-t-zinc-300"
+        style="animation: spin 0.7s linear infinite"
+      ></div>
+      <p class="text-sm">加载中…</p>
+    </div>
+  </div>
 {/if}
-
-<style>
-  @keyframes loading-bar {
-    0% { width: 0%; opacity: 1; }
-    50% { width: 70%; opacity: 1; }
-    100% { width: 100%; opacity: 0; }
-  }
-</style>
 
 {@render children()}
