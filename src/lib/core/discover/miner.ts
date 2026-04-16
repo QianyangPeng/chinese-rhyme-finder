@@ -135,9 +135,11 @@ function scoreCluster(
   const semanticTags = distinctTags.filter((t) => !t.startsWith('freq:'));
   const diversity = Math.min(semanticTags.length, 5) / 5;
 
-  // Multi-syllable depth bonus (logarithmic so 4 押 doesn't dominate
-  // 2 押 by a 2x factor).
-  const lengthBonus = Math.log2(patternLength + 1);
+  // Mild depth nudge — deeper rhymes get a small bonus but DON'T
+  // dominate. A great 2-push (q=0.95) beats a mediocre 4-push (q=0.7).
+  //   1押: 1.0,  2押: 1.1,  3押: 1.2,  4押: 1.3,  5押: 1.4
+  // Old formula (log2) gave 2押=1.58, 4押=2.32 — way too aggressive.
+  const lengthBonus = 1 + 0.1 * (patternLength - 1);
 
   // Member count: enough to be browsable but capped (clusters of 50
   // shouldn't overshadow tighter ones with 4 sharp members).

@@ -81,7 +81,10 @@
   }
 
   let toneMode = $state<ToneMode>('none');
-  let minDepth = $state(2);
+  // 0 = "全部" (show all depths, balanced ranking). N = show only N-push.
+  let selectedDepth = $state(0);
+  // For the miner: always mine from depth 1 when "全部", else exact depth.
+  const minDepth = $derived(selectedDepth === 0 ? 1 : selectedDepth);
   let minMembers = $state(3);
   let tailOnly = $state(true);
   let lens = $state<Lens>('featured');
@@ -111,7 +114,7 @@
     const m = Number.parseInt(params.get('members') ?? '', 10);
     const t = params.get('tail');
     const tone = params.get('tone');
-    if (Number.isFinite(d) && d >= 1) minDepth = d;
+    if (Number.isFinite(d) && d >= 0) selectedDepth = d;
     if (Number.isFinite(m) && m >= 2) minMembers = m;
     if (t === 'all') tailOnly = false;
     if (tone === 'exact' || tone === 'pingze') toneMode = tone;
@@ -141,7 +144,7 @@
     if (!urlReady || typeof window === 'undefined') return;
     const qp = new URLSearchParams();
     if (toneMode !== 'none') qp.set('tone', toneMode);
-    if (minDepth !== 2) qp.set('depth', String(minDepth));
+    if (selectedDepth !== 0) qp.set('depth', String(selectedDepth));
     if (minMembers !== 3) qp.set('members', String(minMembers));
     if (!tailOnly) qp.set('tail', 'all');
     if (lens !== 'featured') qp.set('lens', lens);
@@ -271,27 +274,39 @@
   const PAGE_SIZE = 50;
 
   const filteredClusters = $derived(
-    filterText.trim()
-      ? catalog.clusters.filter((c) => {
-          const q = filterText.trim();
+    (() => {
+      let result = catalog.clusters;
+
+      // Exact depth filter (0 = show all, N = only N-push)
+      if (selectedDepth > 0) {
+        result = result.filter((c: any) => c.patternLength === selectedDepth);
+      }
+
+      // Text search filter
+      const q = filterText.trim();
+      if (q) {
+        result = result.filter((c: any) => {
           const deduped = catalog._deduped?.get(c.id);
           const members = deduped?.visible ?? c.members;
           return members.some((m: any) => catalog.lexiconRef[m.phraseId]?.text?.includes(q));
-        })
-      : catalog.clusters
+        });
+      }
+
+      return result;
+    })()
   );
   let visibleCount = $state(PAGE_SIZE);
 
   $effect(() => {
-    const depth = minDepth;
+    // Always fetch depth-1 file (superset of all depths). Depth
+    // filtering is instant client-side via filteredClusters.
     const tone = toneMode;
     const defaultConfig = isDefaultSourceConfig();
 
     miningInProgress = true;
 
     if (defaultConfig) {
-      // Fast path: fetch pre-computed cluster file (~500KB).
-      const file = `${base}/data/clusters/depth-${depth}-tone-${tone}.json`;
+      const file = `${base}/data/clusters/depth-1-tone-${tone}.json`;
       fetch(file)
         .then((r) => r.ok ? r.json() : Promise.reject('not found'))
         .then((data) => {
@@ -316,7 +331,6 @@
     // against the seed (865 entries) and get 0 results.
     ensureExtendedLexicon(base).then((fullLex) => {
       lexicon = fullLex;
-      const depth = minDepth;
       const members = minMembers;
       const tail = tailOnly;
       const tone = toneMode;
@@ -327,7 +341,7 @@
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const raw = mineClusters(lex, scheme, {
-              minPatternLength: depth,
+              minPatternLength: 1,  // mine all depths, filter client-side
               minMembers: members,
               tailOnly: tail,
               toneMode: tone,
@@ -511,19 +525,19 @@
       </div>
     </div>
     <div>
-      <p class="mb-1 text-xs text-zinc-500">最低押韵深度</p>
+      <p class="mb-1 text-xs text-zinc-500">押韵字数</p>
       <select
-        bind:value={minDepth}
+        bind:value={selectedDepth}
         class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs"
       >
-        <option value={1}>1 押</option>
-        <option value={2}>2 押</option>
-        <option value={3}>3 押</option>
-        <option value={4}>4 押</option>
-        <option value={5}>5 押</option>
-        <option value={6}>6 押</option>
-        <option value={7}>7 押</option>
-        <option value={8}>8 押</option>
+        <option value={0}>全部</option>
+        <option value={2}>双押</option>
+        <option value={3}>三押</option>
+        <option value={4}>四押</option>
+        <option value={5}>五押</option>
+        <option value={6}>六押</option>
+        <option value={7}>七押</option>
+        <option value={8}>八押</option>
       </select>
     </div>
     <div>
