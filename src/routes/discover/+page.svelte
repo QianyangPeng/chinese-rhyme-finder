@@ -72,19 +72,23 @@
   let minMembers = $state(3);
   let tailOnly = $state(true);
   let lens = $state<Lens>('featured');
-  // Default-hide 唐诗/宋词/歇后语: they dominate the non-idiom slice at
-  // 4+ 押 without being rap-relevant. User can toggle on for classical
-  // discovery. The 'poetry' lens always shows classical regardless.
-  let includeClassical = $state(false);
+  // Per-source toggles: user can enable/disable each corpus independently.
+  // Classical sources default off; modern sources default on.
+  const SOURCE_TOGGLES: Array<{ id: string; label: string; defaultOn: boolean }> = [
+    { id: 'xinhua-idiom',        label: '成语', defaultOn: true },
+    { id: 'opensubtitles-zh',    label: '口语', defaultOn: true },
+    { id: 'wiktionary-slang',    label: '网络', defaultOn: true },
+    { id: 'seed-v1',             label: '种子', defaultOn: true },
+    { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: false },
+    { id: 'chinese-poetry/song', label: '宋词', defaultOn: false },
+    { id: 'xinhua-xiehouyu',     label: '歇后', defaultOn: false },
+  ];
+  let enabledSources = $state<Record<string, boolean>>(
+    Object.fromEntries(SOURCE_TOGGLES.map((s) => [s.id, s.defaultOn]))
+  );
   let urlReady = $state(false);
   let lexicon = $state<Lexicon>(getCurrentLexicon());
   let extendedLoading = $state(false);
-
-  const CLASSICAL_SOURCES = new Set([
-    'chinese-poetry/tang',
-    'chinese-poetry/song',
-    'xinhua-xiehouyu'
-  ]);
 
   // URL-based state overrides applied only after mount to avoid touching
   // searchParams during SvelteKit's build-time prerender.
@@ -109,7 +113,11 @@
     ) {
       lens = lensParam;
     }
-    if (params.get('classical') === '1') includeClassical = true;
+    // Per-source overrides: ?off=xinhua-idiom,opensubtitles-zh  or  ?on=chinese-poetry/tang
+    const offParam = params.get('off');
+    const onParam = params.get('on');
+    if (offParam) for (const s of offParam.split(',')) enabledSources[s] = false;
+    if (onParam) for (const s of onParam.split(',')) enabledSources[s] = true;
     urlReady = true;
 
     // If not already loaded, show a loading hint and swap in when ready.
@@ -134,7 +142,11 @@
     if (minMembers !== 3) qp.set('members', String(minMembers));
     if (!tailOnly) qp.set('tail', 'all');
     if (lens !== 'featured') qp.set('lens', lens);
-    if (includeClassical) qp.set('classical', '1');
+    // Encode source toggles: only non-default states
+    const offSources = SOURCE_TOGGLES.filter((s) => s.defaultOn && !enabledSources[s.id]).map((s) => s.id);
+    const onSources = SOURCE_TOGGLES.filter((s) => !s.defaultOn && enabledSources[s.id]).map((s) => s.id);
+    if (offSources.length) qp.set('off', offSources.join(','));
+    if (onSources.length) qp.set('on', onSources.join(','));
     const qs = qp.toString();
     const url = `${base}/discover/${qs ? '?' + qs : ''}`;
     if (window.location.pathname + window.location.search !== url) {
@@ -144,15 +156,18 @@
 
   const scheme = strictScheme; // UI exposes only 严式
 
-  /** Build a derivative Lexicon that excludes 唐诗/宋词/歇后语 sources.
-   *  Memoized by source-lexicon identity so toggling `includeClassical`
-   *  on/off doesn't invalidate the miner's bucket cache — each lexicon
-   *  object survives and is reused. */
-  const _filteredCache = new WeakMap<Lexicon, Lexicon>();
-  function getNonClassicalLexicon(full: Lexicon): Lexicon {
-    const cached = _filteredCache.get(full);
+  /** Build a derivative Lexicon keeping only phrases from enabled sources.
+   *  Memoized by a cache key string so toggling one source doesn't
+   *  rebuild from scratch if the same combo was seen before. */
+  const _filteredLexiconCache = new Map<string, Lexicon>();
+  function getFilteredLexicon(full: Lexicon, enabled: Record<string, boolean>): Lexicon {
+    const key = SOURCE_TOGGLES.map((s) => (enabled[s.id] ? '1' : '0')).join('');
+    const allOn = !key.includes('0');
+    if (allOn) return full;
+    const cached = _filteredLexiconCache.get(key);
     if (cached) return cached;
-    const phrases = full.phrases.filter((p) => !CLASSICAL_SOURCES.has(p.source));
+    const allowedSet = new Set(SOURCE_TOGGLES.filter((s) => enabled[s.id]).map((s) => s.id));
+    const phrases = full.phrases.filter((p) => allowedSet.has(p.source));
     const byLength = new Map<number, number[]>();
     for (let id = 0; id < phrases.length; id++) {
       const L = phrases[id].length;
@@ -164,14 +179,15 @@
       bucket.push(id);
     }
     const out: Lexicon = { phrases, byLength };
-    _filteredCache.set(full, out);
+    _filteredLexiconCache.set(key, out);
     return out;
   }
 
-  // The 'poetry' lens always shows classical content; everything else
-  // respects includeClassical (default off).
+  // Poetry lens forces all sources on. Other lenses respect toggles.
   const activeLexicon = $derived(
-    lens === 'poetry' || includeClassical ? lexicon : getNonClassicalLexicon(lexicon)
+    lens === 'poetry'
+      ? lexicon
+      : getFilteredLexicon(lexicon, enabledSources)
   );
 
   // Mine a generous batch of clusters. Bucket cache is keyed by
@@ -233,7 +249,7 @@
     members: readonly { phraseId: number; tailOffset: number }[],
     lexiconRef: readonly PhraseRecord[],
     patternLength: number,
-    maxPerGroup = 2
+    maxPerGroup = 1
   ): { visible: typeof members; collapsed: number } {
     type M = { phraseId: number; tailOffset: number };
     const byTail = new Map<string, M[]>();
@@ -515,27 +531,25 @@
     </div>
   </div>
 
-  <!-- Source toggle: classical sources (唐诗/宋词/歇后语) dominate non-
-       idiom slices at 4+押 without being rap-relevant; default off. -->
-  <div class="mb-4 flex flex-wrap items-center gap-2 text-xs">
-    <label
-      class="inline-flex cursor-pointer items-center gap-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 select-none hover:bg-zinc-50 dark:hover:bg-zinc-800"
-      title="默认关闭：唐诗/宋词/歇后语对 rap 不太有用，占位太多。打开后所有 lens（诗词 lens 除外）都会把它们算进来。"
-    >
-      <input
-        type="checkbox"
-        class="h-3 w-3 accent-zinc-900 dark:accent-zinc-100"
-        checked={includeClassical}
-        onchange={(e) => (includeClassical = (e.currentTarget as HTMLInputElement).checked)}
+  <!-- Per-source toggles: each corpus has its own on/off badge. -->
+  <div class="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+    <span class="text-zinc-500 mr-1">语料源：</span>
+    {#each SOURCE_TOGGLES as src (src.id)}
+      {@const badge = sourceBadge(src.id)}
+      <button
+        class="rounded px-2 py-1 font-mono text-[10px] transition select-none {enabledSources[src.id]
+          ? `${badge.cls} ring-1 ring-current`
+          : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 line-through'}"
+        title="{src.label} ({src.id}) — 点击切换"
         disabled={lens === 'poetry'}
-      />
-      <span class="text-zinc-700 dark:text-zinc-300">
-        含唐诗/宋词/歇后语
-      </span>
-      {#if lens === 'poetry'}
-        <span class="text-zinc-400">（诗词 lens 自动启用）</span>
-      {/if}
-    </label>
+        onclick={() => (enabledSources[src.id] = !enabledSources[src.id])}
+      >
+        {src.label}
+      </button>
+    {/each}
+    {#if lens === 'poetry'}
+      <span class="text-zinc-400 text-[10px]">（诗词 lens 忽略过滤）</span>
+    {/if}
   </div>
 
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
@@ -614,7 +628,7 @@
           <ul class="flex flex-wrap gap-2">
             {#each deduped.visible as m (m.phraseId)}
               {@const phrase = catalog.lexiconRef[m.phraseId]}
-              {@const chars = [...phrase.text]}
+              {@const chars = [...phrase.text].filter((ch) => /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch))}
               {@const matchStart = phrase.length - cluster.patternLength - m.tailOffset}
               {@const matchEnd = phrase.length - m.tailOffset}
               {@const badge = sourceBadge(phrase.source)}
