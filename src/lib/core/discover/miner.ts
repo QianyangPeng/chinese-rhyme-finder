@@ -114,9 +114,19 @@ function scoreCluster(
   patternLength: number,
   distinctTags: readonly string[]
 ): number {
-  // Average quality of member phrases.
+  // Average quality of member phrases, with a per-phrase penalty for
+  // repeated characters (反反复复, 打打杀杀 etc. — same-char repetition
+  // isn't clever rhyming, just reduplication).
   let qSum = 0;
-  for (const m of members) qSum += lexicon.phrases[m.phraseId].quality;
+  for (const m of members) {
+    let q = lexicon.phrases[m.phraseId].quality;
+    const chars = [...lexicon.phrases[m.phraseId].text];
+    const uniqueRatio = new Set(chars).size / chars.length;
+    // uniqueRatio = 1.0 for all-distinct, 0.5 for 反反复复 (2 unique / 4)
+    // Penalize when < 0.75 (at least 25% repeated chars).
+    if (uniqueRatio < 0.75) q *= 0.5 + uniqueRatio * 0.5;
+    qSum += q;
+  }
   const avgQuality = qSum / members.length;
 
   // Domain diversity: more distinct tags = higher. Strip freq:N debug

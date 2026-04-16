@@ -11,15 +11,10 @@
   import { onMount } from 'svelte';
   import { favorites } from '$lib/stores/favorites.svelte';
 
-  // Discovery "lens" — the viewpoint the user is browsing through.
-  //   featured: default, ordered by cleverness
-  //   deep:     multi-push leaderboard, deepest K first
-  //   cross:    cross-domain clusters (mixed tags across member phrases)
-  //   gems:     hidden gems — high quality but few members (surprise factor)
-  //   poetry:   pure 唐诗/宋词 clusters — classical register isolated
-  //   modern:   non-idiom clusters — rap-ready register (idioms are minority)
-  //   saved:    user's favorite clusters from localStorage
-  type Lens = 'featured' | 'deep' | 'cross' | 'gems' | 'poetry' | 'modern' | 'saved';
+  // Simplified: just default (cleverness-sorted) or saved (favorites).
+  // Lens tabs were removed — per-source toggles + depth selector give
+  // users all the filtering they need without cognitive overhead.
+  type Lens = 'featured' | 'saved';
 
   /**
    * Small corner badge on each member card identifying which source the
@@ -78,7 +73,7 @@
     { id: 'xinhua-idiom',        label: '成语', defaultOn: true },
     { id: 'opensubtitles-zh',    label: '口语', defaultOn: true },
     { id: 'wiktionary-slang',    label: '网络', defaultOn: true },
-    { id: 'seed-v1',             label: '种子', defaultOn: true },
+    { id: 'seed-v1',             label: '精选', defaultOn: true },
     { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: false },
     { id: 'chinese-poetry/song', label: '宋词', defaultOn: false },
     { id: 'xinhua-xiehouyu',     label: '歇后', defaultOn: false },
@@ -103,16 +98,7 @@
     if (t === 'all') tailOnly = false;
     if (tone === 'exact' || tone === 'pingze') toneMode = tone;
     const lensParam = params.get('lens');
-    if (
-      lensParam === 'deep' ||
-      lensParam === 'cross' ||
-      lensParam === 'gems' ||
-      lensParam === 'poetry' ||
-      lensParam === 'modern' ||
-      lensParam === 'saved'
-    ) {
-      lens = lensParam;
-    }
+    if (lensParam === 'saved') lens = lensParam;
     // Per-source overrides: ?off=xinhua-idiom,opensubtitles-zh  or  ?on=chinese-poetry/tang
     const offParam = params.get('off');
     const onParam = params.get('on');
@@ -183,11 +169,8 @@
     return out;
   }
 
-  // Poetry lens forces all sources on. Other lenses respect toggles.
   const activeLexicon = $derived(
-    lens === 'poetry'
-      ? lexicon
-      : getFilteredLexicon(lexicon, enabledSources)
+    getFilteredLexicon(lexicon, enabledSources)
   );
 
   // Mine a generous batch of clusters. Bucket cache is keyed by
@@ -206,28 +189,7 @@
     })
   );
 
-  // Generic tags carried by most xinhua entries — don't count them as
-  // "domain" for the cross-domain lens or nothing would filter.
-  const MUNDANE_TAGS = new Set(['idiom', 'xinhua']);
-
-  function specificTags(
-    cluster: (typeof rawCatalog.clusters)[number]
-  ): string[] {
-    return cluster.distinctTags.filter((t) => !MUNDANE_TAGS.has(t));
-  }
-
-  function avgQuality(cluster: (typeof rawCatalog.clusters)[number]) {
-    let sum = 0;
-    for (const m of cluster.members) {
-      sum += rawCatalog.lexiconRef[m.phraseId].quality;
-    }
-    return sum / cluster.members.length;
-  }
-
-  /** All member sources for a cluster — used by poetry/modern lens filters. */
-  function memberSources(cluster: (typeof rawCatalog.clusters)[number]): string[] {
-    return cluster.members.map((m) => rawCatalog.lexiconRef[m.phraseId].source);
-  }
+  // (Removed: specificTags, avgQuality, memberSources — lens tabs gone)
 
   /**
    * Collapse template-filler duplication inside a cluster. Two grouping
@@ -301,103 +263,31 @@
     };
   }
 
+  /** Catalog derivation: apply dedup per cluster, then enforce minMembers
+   *  on the VISIBLE count (not raw count). Clusters where dedup collapses
+   *  everything down to 1 visible member are dropped — no discovery value. */
   const catalog = $derived(
     (() => {
-      const input = rawCatalog.clusters;
-      let out: typeof input;
-      switch (lens) {
-        case 'deep':
-          // Multi-push leaderboard: deepest first, cleverness breaks ties.
-          out = [...input].sort((a, b) => {
-            if (b.patternLength !== a.patternLength)
-              return b.patternLength - a.patternLength;
-            return b.cleverness - a.cleverness;
-          });
-          break;
-        case 'cross':
-          // Cross-domain: require the cluster to span at least one tag
-          // BEYOND the generic [idiom, xinhua] pair — i.e. at least one
-          // member must carry a specific-domain tag (scifi, modern,
-          // sanguo, classical, …), which in practice means it pulls in
-          // something from the curated seed corpus next to the xinhua
-          // idioms. Sort by specific-tag count desc then cleverness.
-          out = input
-            .filter((c) => specificTags(c).length >= 1)
-            .sort((a, b) => {
-              const sa = specificTags(a).length;
-              const sb = specificTags(b).length;
-              if (sb !== sa) return sb - sa;
-              return b.cleverness - a.cleverness;
-            });
-          break;
-        case 'gems':
-          // Hidden gems: high quality + small membership (surprise factor).
-          out = input
-            .filter((c) => c.members.length >= 3 && c.members.length <= 6)
-            .filter((c) => avgQuality(c) >= 0.8)
-            .sort((a, b) => avgQuality(b) - avgQuality(a));
-          break;
-        case 'poetry':
-          // Classical register: ≥2 poetry members, no 成语 members, no 网络词
-          // members. Requiring 100% poetry was too strict — poetry clusters
-          // rarely survive the top-200 cleverness cut against idiom-dominated
-          // peers, so we permit a small seed/xiehouyu mix (xiehouyu is often
-          // classical-flavored) while hard-excluding 成语 and 网络词 which
-          // break the register.
-          out = input
-            .filter((c) => {
-              const srcs = memberSources(c);
-              const poetryCount = srcs.filter((s) => s.startsWith('chinese-poetry/')).length;
-              const hasIdiom = srcs.includes('xinhua-idiom');
-              const hasSlang = srcs.includes('wiktionary-slang');
-              return poetryCount >= 2 && !hasIdiom && !hasSlang;
-            })
-            .sort((a, b) => {
-              const pa = memberSources(a).filter((s) => s.startsWith('chinese-poetry/')).length / a.members.length;
-              const pb = memberSources(b).filter((s) => s.startsWith('chinese-poetry/')).length / b.members.length;
-              if (pa !== pb) return pb - pa;
-              return b.cleverness - a.cleverness;
-            });
-          break;
-        case 'modern':
-          // Non-idiom clusters: directly address rap register gap. Require
-          // at least half the members come from non-成语 sources AND at
-          // least 2 non-idiom members exist (so a 3-idiom + 1-modern cluster
-          // doesn't sneak in). Sort by idiom-ratio ascending then cleverness.
-          out = input
-            .filter((c) => {
-              const srcs = memberSources(c);
-              const nonIdiom = srcs.filter((s) => s !== 'xinhua-idiom').length;
-              return nonIdiom >= 2 && nonIdiom / srcs.length >= 0.5;
-            })
-            .sort((a, b) => {
-              const ia = memberSources(a).filter((s) => s === 'xinhua-idiom').length / a.members.length;
-              const ib = memberSources(b).filter((s) => s === 'xinhua-idiom').length / b.members.length;
-              if (ia !== ib) return ia - ib;
-              return b.cleverness - a.cleverness;
-            });
-          break;
-        case 'saved':
-          // User favorites — keep cleverness order within the subset.
-          out = input.filter((c) => favorites.has(c.id));
-          break;
-        case 'featured':
-        default:
-          out = input; // already cleverness-sorted by the miner
-      }
-      return { ...rawCatalog, clusters: out.slice(0, 200) };
+      const input = lens === 'saved'
+        ? rawCatalog.clusters.filter((c) => favorites.has(c.id))
+        : rawCatalog.clusters;
+
+      // Apply stemDedupe to each cluster, then filter by visible >= minMembers.
+      const withDedup = input
+        .map((cluster) => ({
+          cluster,
+          deduped: stemDedupe(cluster.members, rawCatalog.lexiconRef, cluster.patternLength)
+        }))
+        .filter(({ deduped }) => deduped.visible.length >= minMembers);
+
+      return {
+        ...rawCatalog,
+        clusters: withDedup.slice(0, 200).map(({ cluster }) => cluster),
+        // Stash dedup results so render doesn't recompute.
+        _deduped: new Map(withDedup.slice(0, 200).map(({ cluster, deduped }) => [cluster.id, deduped]))
+      };
     })()
   );
-
-  const LENSES: Array<{ id: Lens; label: string; hint: string }> = [
-    { id: 'featured', label: '精选推荐', hint: '按巧妙度综合排序' },
-    { id: 'modern',   label: '非成语',   hint: '成员以现代口语/歇后/网络词为主 — 更接近 rap 语感' },
-    { id: 'deep',     label: '多押榜',   hint: '最深的多押模式优先' },
-    { id: 'cross',    label: '跨域押韵', hint: '成员来自多个语料域' },
-    { id: 'gems',     label: '冷门明珠', hint: '高质量但成员少的惊喜组合' },
-    { id: 'poetry',   label: '唐诗宋词', hint: '纯古典诗词片段 cluster — 与现代隔离展示' },
-    { id: 'saved',    label: '我的收藏', hint: '保存到本地的 cluster（localStorage）' }
-  ];
 
   /** Render at most 5 stars based on cleverness (raw value rescaled). */
   function stars(cleverness: number): string {
@@ -444,19 +334,16 @@
     </div>
   {/if}
 
-  <!-- Lens tabs -->
-  <div class="mb-5 flex flex-wrap gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-1">
-    {#each LENSES as L (L.id)}
-      <button
-        class="flex-1 rounded px-3 py-1.5 text-xs font-semibold transition {lens === L.id
-          ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
-          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'}"
-        title={L.hint}
-        onclick={() => (lens = L.id)}
-      >
-        {L.label}
-      </button>
-    {/each}
+  <!-- Saved toggle (replaces lens tabs) -->
+  <div class="mb-5">
+    <button
+      class="rounded-lg border px-4 py-1.5 text-xs font-semibold transition {lens === 'saved'
+        ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300'
+        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+      onclick={() => (lens = lens === 'saved' ? 'featured' : 'saved')}
+    >
+      {lens === 'saved' ? '❤️ 查看全部' : '❤️ 我的收藏'}
+    </button>
   </div>
 
   <!-- Controls -->
@@ -541,15 +428,11 @@
           ? `${badge.cls} ring-1 ring-current`
           : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 line-through'}"
         title="{src.label} ({src.id}) — 点击切换"
-        disabled={lens === 'poetry'}
         onclick={() => (enabledSources[src.id] = !enabledSources[src.id])}
       >
         {src.label}
       </button>
     {/each}
-    {#if lens === 'poetry'}
-      <span class="text-zinc-400 text-[10px]">（诗词 lens 忽略过滤）</span>
-    {/if}
   </div>
 
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
@@ -568,7 +451,7 @@
   {:else}
     <div class="space-y-3">
       {#each catalog.clusters as cluster (cluster.id)}
-        {@const deduped = stemDedupe(cluster.members, catalog.lexiconRef, cluster.patternLength)}
+        {@const deduped = catalog._deduped?.get(cluster.id) ?? { visible: cluster.members, collapsed: 0 }}
         <article class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <header class="mb-3 flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
