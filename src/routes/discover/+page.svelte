@@ -265,6 +265,7 @@
   let miningInProgress = $state(true);
   let usingPrecomputed = $state(false);
   let totalPhrasesInCorpus = $state(0);
+  let filterText = $state('');
   const PAGE_SIZE = 50;
   let visibleCount = $state(PAGE_SIZE);
 
@@ -565,9 +566,30 @@
     {/each}
   </div>
 
+  <!-- Text filter -->
+  <div class="mb-3">
+    <input
+      type="text"
+      bind:value={filterText}
+      placeholder="搜索 cluster（输入汉字/词过滤）"
+      class="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+    />
+  </div>
+
+  {@const filteredClusters = filterText.trim()
+    ? catalog.clusters.filter((c) => {
+        const q = filterText.trim();
+        const deduped = catalog._deduped?.get(c.id);
+        const members = deduped?.visible ?? c.members;
+        return members.some((m) => catalog.lexiconRef[m.phraseId]?.text?.includes(q));
+      })
+    : catalog.clusters}
+
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-    找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{catalog.clusters.length}</span> 组 cluster
-    {#if catalog.clusters.length > visibleCount}
+    找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{filteredClusters.length}</span> 组 cluster
+    {#if filterText.trim()}
+      <span class="text-zinc-400">（含 "{filterText.trim()}"）</span>
+    {:else if filteredClusters.length > visibleCount}
       <span class="text-zinc-400">（显示前 {visibleCount}，向下滚动加载更多）</span>
     {/if}
   </p>
@@ -581,7 +603,7 @@
       ></div>
       <p class="mt-3 text-sm">正在计算押韵组合…</p>
     </div>
-  {:else if catalog.clusters.length === 0}
+  {:else if filteredClusters.length === 0}
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center text-sm text-zinc-500">
       {#if lens === 'saved'}
         还没有收藏的 cluster —— 去其它透镜逛一逛，看到喜欢的点 <span class="mx-1 align-middle">♡</span> 收藏它。
@@ -591,7 +613,7 @@
     </div>
   {:else}
     <div class="space-y-3">
-      {#each catalog.clusters.slice(0, visibleCount) as cluster (cluster.id)}
+      {#each filteredClusters.slice(0, visibleCount) as cluster (cluster.id)}
         {@const deduped = catalog._deduped?.get(cluster.id) ?? { visible: cluster.members, collapsed: 0 }}
         <article class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
           <header class="mb-3 flex items-start justify-between gap-3">
@@ -714,7 +736,7 @@
       {/each}
 
       <!-- Infinite scroll sentinel -->
-      {#if visibleCount < catalog.clusters.length}
+      {#if visibleCount < filteredClusters.length}
         <div
           class="flex items-center justify-center py-8 text-zinc-400"
           use:observeIntersection={() => { visibleCount += PAGE_SIZE; }}
@@ -723,11 +745,11 @@
             class="h-5 w-5 rounded-full border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-500 dark:border-t-zinc-400"
             style="animation: spin 0.7s linear infinite"
           ></div>
-          <span class="ml-2 text-xs">加载更多（{visibleCount}/{catalog.clusters.length}）</span>
+          <span class="ml-2 text-xs">加载更多（{visibleCount}/{filteredClusters.length}）</span>
         </div>
-      {:else if catalog.clusters.length > PAGE_SIZE}
+      {:else if filteredClusters.length > PAGE_SIZE}
         <p class="py-6 text-center text-xs text-zinc-400">
-          全部 {catalog.clusters.length} 组已显示
+          全部 {filteredClusters.length} 组已显示
         </p>
       {/if}
     </div>
