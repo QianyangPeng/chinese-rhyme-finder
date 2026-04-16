@@ -590,11 +590,19 @@
   </div>
 
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-    找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{filteredClusters.length}</span> 组 cluster
+    找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{filteredClusters.length}</span> 组
     {#if filterText.trim()}
-      <span class="text-zinc-400">（含 "{filterText.trim()}"）</span>
+      <span class="text-zinc-400">（含「{filterText.trim()}」）</span>
+      {#if filteredClusters.length === 0 && usingPrecomputed}
+        <button
+          class="ml-2 rounded border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/30 px-2 py-0.5 text-xs text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50"
+          onclick={() => { doRuntimeMining(); }}
+        >
+          加载完整词库搜索 →
+        </button>
+      {/if}
     {:else if filteredClusters.length > visibleCount}
-      <span class="text-zinc-400">（显示前 {visibleCount}，向下滚动加载更多）</span>
+      <span class="text-zinc-400">（向下滚动加载更多）</span>
     {/if}
   </p>
 
