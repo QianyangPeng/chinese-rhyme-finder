@@ -7,7 +7,8 @@ export {
   buildLexicon,
   getDefaultLexicon,
   ensureExtendedLexicon,
-  getCurrentLexicon
+  getCurrentLexicon,
+  onLexiconUpdate
 } from './loader.js';
 export {
   searchByFinals,

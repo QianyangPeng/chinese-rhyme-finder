@@ -3,7 +3,8 @@
   import type { ToneMode } from '$lib/core/rhyme';
   import {
     getCurrentLexicon,
-    ensureExtendedLexicon
+    ensureExtendedLexicon,
+    onLexiconUpdate
   } from '$lib/core/corpus';
   import type { Lexicon, PhraseRecord } from '$lib/core/corpus';
   import { mineClusters } from '$lib/core/discover';
@@ -86,10 +87,8 @@
   );
   let urlReady = $state(false);
   let lexicon = $state<Lexicon>(getCurrentLexicon());
-  let extendedLoading = $state(false);
+  let loadedSourceCount = $state(0);
 
-  // URL-based state overrides applied only after mount to avoid touching
-  // searchParams during SvelteKit's build-time prerender.
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     const d = Number.parseInt(params.get('depth') ?? '', 10);
@@ -102,24 +101,20 @@
     if (tone === 'exact' || tone === 'pingze') toneMode = tone;
     const lensParam = params.get('lens');
     if (lensParam === 'saved') lens = lensParam;
-    // Per-source overrides: ?off=xinhua-idiom,opensubtitles-zh  or  ?on=chinese-poetry/tang
     const offParam = params.get('off');
     const onParam = params.get('on');
     if (offParam) for (const s of offParam.split(',')) enabledSources[s] = false;
     if (onParam) for (const s of onParam.split(',')) enabledSources[s] = true;
     urlReady = true;
 
-    // If not already loaded, show a loading hint and swap in when ready.
-    if (lexicon.phrases.length < 5000) {
-      extendedLoading = true;
-      ensureExtendedLexicon(base)
-        .then((lex) => {
-          lexicon = lex;
-        })
-        .finally(() => {
-          extendedLoading = false;
-        });
-    }
+    // Kick off incremental per-source loading. Each source that arrives
+    // triggers a re-render — user sees results grow progressively.
+    ensureExtendedLexicon(base);
+    const unsub = onLexiconUpdate((lex) => {
+      lexicon = lex;
+      loadedSourceCount++;
+    });
+    return unsub;
   });
 
   // Mirror state → URL for sharing.
@@ -348,20 +343,15 @@
   </header>
 
   <!-- Lexicon status -->
-  {#if extendedLoading}
-    <div class="mb-5 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-      正在加载完整词库（3~5 MB 的成语数据集）… 先用 {lexicon.phrases.length} 条种子渲染，一会儿会自动切到完整版。
-    </div>
-  {:else if lexicon.phrases.length >= 5000}
-    <div class="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-      词库已加载 <span class="font-semibold">{lexicon.phrases.length}</span> 条
-      （种子 · 新华成语 · 歇后语答案 · 唐诗/宋词三百首片段 · Wiktionary 网络用语）。
-    </div>
-  {:else}
-    <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-      目前只用 {lexicon.phrases.length} 条种子词库（扩展词库未加载成功）。cluster 数量受限。
-    </div>
-  {/if}
+  <!-- Incremental loading status -->
+  <div class="mb-5 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-xs text-zinc-700 dark:text-zinc-300">
+    词库 <span class="font-semibold">{lexicon.phrases.length.toLocaleString()}</span> 条
+    {#if loadedSourceCount > 0}
+      <span class="text-emerald-600 dark:text-emerald-400">
+        （{loadedSourceCount} 个语料源已加载，更多加载中…）
+      </span>
+    {/if}
+  </div>
 
   <!-- Saved toggle (replaces lens tabs) -->
   <div class="mb-5">

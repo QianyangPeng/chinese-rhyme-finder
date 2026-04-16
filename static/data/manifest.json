@@ -1,0 +1,50 @@
+[
+  {
+    "source": "chinese-poetry/song",
+    "file": "chinese-poetry-song.json",
+    "count": 5078,
+    "sizeKB": 1638.1
+  },
+  {
+    "source": "chinese-poetry/tang",
+    "file": "chinese-poetry-tang.json",
+    "count": 3267,
+    "sizeKB": 1198.8
+  },
+  {
+    "source": "lyrics-hiphop",
+    "file": "lyrics-hiphop.json",
+    "count": 70137,
+    "sizeKB": 25412.8
+  },
+  {
+    "source": "lyrics-pop",
+    "file": "lyrics-pop.json",
+    "count": 624613,
+    "sizeKB": 220257.2
+  },
+  {
+    "source": "opensubtitles-zh",
+    "file": "opensubtitles-zh.json",
+    "count": 74816,
+    "sizeKB": 20117.5
+  },
+  {
+    "source": "wiktionary-slang",
+    "file": "wiktionary-slang.json",
+    "count": 274,
+    "sizeKB": 68.6
+  },
+  {
+    "source": "xinhua-idiom",
+    "file": "xinhua-idiom.json",
+    "count": 20191,
+    "sizeKB": 5223.0
+  },
+  {
+    "source": "xinhua-xiehouyu",
+    "file": "xinhua-xiehouyu.json",
+    "count": 6534,
+    "sizeKB": 1875.6
+  }
+]

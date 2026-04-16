@@ -166,45 +166,126 @@ function normalizeEntry(raw: RawLexiconEntry): PhraseRecord {
   };
 }
 
-let _extendedLexicon: Lexicon | null = null;
-let _extendedPromise: Promise<Lexicon> | null = null;
+// ─── Incremental per-source loading ───────────────────────────────
+//
+// Instead of one monolithic lexicon.json, we load each source as a
+// separate JSON file in parallel. Smaller files (成語 2MB) arrive
+// first and render immediately; larger files (pop lyrics 50MB) arrive
+// later and progressively enhance the results.
 
-/**
- * Get the extended lexicon (seed + xinhua idioms). Asynchronous on
- * first call; subsequent calls resolve immediately from cache.
- *
- * `baseUrl` should be SvelteKit's `base` path (e.g., '/chinese-rhyme-finder'
- * on GitHub Pages, '' in dev). Fetch uses `${baseUrl}/data/lexicon.json`.
- */
-export function ensureExtendedLexicon(baseUrl = ''): Promise<Lexicon> {
-  if (_extendedLexicon) return Promise.resolve(_extendedLexicon);
-  if (_extendedPromise) return _extendedPromise;
+/** Per-source file manifest. Ordered by expected load speed (small first). */
+const SOURCE_FILES = [
+  'xinhua-idiom.json',
+  'xinhua-xiehouyu.json',
+  'wiktionary-slang.json',
+  'chinese-poetry-tang.json',
+  'chinese-poetry-song.json',
+  'lyrics-hiphop.json',
+  'opensubtitles-zh.json',
+  'lyrics-pop.json',         // largest — arrives last
+] as const;
 
-  _extendedPromise = (async () => {
-    const seedLex = getDefaultLexicon();
-    try {
-      const res = await fetch(`${baseUrl}/data/lexicon.json`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const doc = (await res.json()) as ExtendedDoc;
-      if (!doc || !Array.isArray(doc.phrases)) throw new Error('malformed doc');
-      const normalized = doc.phrases.map(normalizeEntry);
-      const merged = mergeRecords(seedLex.phrases, normalized);
-      _extendedLexicon = lexiconFromRecords(merged);
-    } catch (err) {
-      // Fall back to seed-only — app stays functional.
-      if (typeof console !== 'undefined') {
-        console.warn('[corpus] extended lexicon fetch failed; using seed only.', err);
-      }
-      _extendedLexicon = seedLex;
-    }
-    return _extendedLexicon;
-  })();
-  return _extendedPromise;
+let _allRecords: PhraseRecord[] = [];
+let _seenTexts = new Set<string>();
+let _currentLexicon: Lexicon | null = null;
+let _loadStarted = false;
+
+/** Callbacks registered by pages that want to re-render on each source load. */
+const _onUpdateCallbacks: Array<(lex: Lexicon) => void> = [];
+
+function _rebuildLexicon(): Lexicon {
+  _currentLexicon = lexiconFromRecords(_allRecords);
+  return _currentLexicon;
 }
 
-/** Synchronous peek: returns the extended lexicon IF it's already been
- *  loaded, else the seed. Useful for pages that want to start rendering
- *  immediately with whatever's available. */
+function _mergeNewPhrases(phrases: PhraseRecord[]): void {
+  for (const p of phrases) {
+    if (!_seenTexts.has(p.text)) {
+      _seenTexts.add(p.text);
+      _allRecords.push(p);
+    }
+  }
+}
+
+/**
+ * Start loading all source files in parallel. Each file that arrives
+ * triggers a merge + rebuild + notify cycle. Pages call `onLexiconUpdate`
+ * to register for incremental notifications.
+ *
+ * Debounces rebuilds: if multiple sources arrive within 200ms, only
+ * one rebuild fires.
+ */
+let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function _notifyUpdate(): void {
+  if (_debounceTimer) clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(() => {
+    const lex = _rebuildLexicon();
+    for (const cb of _onUpdateCallbacks) cb(lex);
+  }, 200);
+}
+
+export function ensureExtendedLexicon(baseUrl = ''): Promise<Lexicon> {
+  if (_loadStarted) return Promise.resolve(getCurrentLexicon());
+  _loadStarted = true;
+
+  // Start with seed records.
+  const seedLex = getDefaultLexicon();
+  _mergeNewPhrases([...seedLex.phrases]);
+  _rebuildLexicon();
+
+  // Try per-source files first. If any fails, fall back to monolithic.
+  const perSourcePromises = SOURCE_FILES.map((file) =>
+    fetch(`${baseUrl}/data/${file}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<ExtendedDoc>;
+      })
+      .then((doc) => {
+        if (!doc || !Array.isArray(doc.phrases)) return;
+        const normalized = doc.phrases.map(normalizeEntry);
+        _mergeNewPhrases(normalized);
+        _notifyUpdate();
+      })
+      .catch(() => {
+        // Individual source failed — silently skip.
+      })
+  );
+
+  // Also try the monolithic file as fallback (for backward compat).
+  const monoPromise = fetch(`${baseUrl}/data/lexicon.json`)
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json() as Promise<ExtendedDoc>;
+    })
+    .then((doc) => {
+      if (!doc || !Array.isArray(doc.phrases)) return;
+      const normalized = doc.phrases.map(normalizeEntry);
+      _mergeNewPhrases(normalized);
+      _notifyUpdate();
+    })
+    .catch(() => {
+      // Monolithic file also missing — stick with whatever per-source loaded.
+    });
+
+  return Promise.allSettled([...perSourcePromises, monoPromise]).then(
+    () => getCurrentLexicon()
+  );
+}
+
+/**
+ * Register a callback that fires every time a new source finishes loading.
+ * Returns an unsubscribe function.
+ */
+export function onLexiconUpdate(cb: (lex: Lexicon) => void): () => void {
+  _onUpdateCallbacks.push(cb);
+  return () => {
+    const idx = _onUpdateCallbacks.indexOf(cb);
+    if (idx >= 0) _onUpdateCallbacks.splice(idx, 1);
+  };
+}
+
+/** Synchronous peek: returns whatever's loaded so far. */
 export function getCurrentLexicon(): Lexicon {
-  return _extendedLexicon ?? getDefaultLexicon();
+  return _currentLexicon ?? getDefaultLexicon();
 }
