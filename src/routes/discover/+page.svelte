@@ -77,7 +77,6 @@
     { id: 'wiktionary-slang',    label: '网络', defaultOn: true },
     { id: 'lyrics-hiphop',       label: '说唱', defaultOn: true },
     { id: 'lyrics-pop',          label: '歌词', defaultOn: true },
-    { id: 'seed-v1',             label: '精选', defaultOn: true },
     { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: false },
     { id: 'chinese-poetry/song', label: '宋词', defaultOn: false },
     { id: 'xinhua-xiehouyu',     label: '歇后', defaultOn: false },

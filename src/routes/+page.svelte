@@ -88,13 +88,6 @@
       color: 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30',
       license: 'CC-BY-SA'
     },
-    {
-      id: 'seed-v1',
-      label: '精选',
-      desc: '手工挑选的现代短语 — 降维打击、知识图谱、相对华丽…',
-      color: 'border-zinc-300 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/30',
-      license: 'MIT'
-    }
   ];
 </script>
 
