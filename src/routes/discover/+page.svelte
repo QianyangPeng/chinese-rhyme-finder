@@ -339,8 +339,7 @@
                 cluster,
                 deduped: stemDedupe(cluster.members, raw.lexiconRef, cluster.patternLength),
               }))
-              .filter(({ deduped }) => deduped.visible.length >= members)
-              .slice(0, 2000);
+              .filter(({ deduped }) => deduped.visible.length >= members);
 
             catalog = {
               clusters: withDedup.map(({ cluster }) => cluster),

@@ -144,16 +144,15 @@ for (const depth of DEPTHS) {
       maxClusters: MAX_CLUSTERS,
     });
 
-    // Cap at 1000 clusters — files ~2.5MB (gzip ~600KB), still loads
-    // in <1s. Infinite scroll renders 50 at a time so DOM stays light.
-    // Text search can filter within these 1000 clusters.
+    // No truncation — include ALL clusters that survive stemDedupe +
+    // minMembers. Infinite scroll handles rendering. File size is
+    // bounded by maxClusters in the miner (8000).
     const processed = catalog.clusters
       .map(cluster => {
         const deduped = stemDedupe(cluster.members, lexicon.phrases, cluster.patternLength);
         return { cluster, deduped };
       })
-      .filter(({ deduped }) => deduped.visible.length >= MIN_MEMBERS)
-      .slice(0, 1000);
+      .filter(({ deduped }) => deduped.visible.length >= MIN_MEMBERS);
 
     // Denormalize: embed full phrase data in each member so browser
     // doesn't need the lexicon to render Discover.
