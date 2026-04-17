@@ -235,7 +235,7 @@
   </section>
 
   <!-- Star prompt -->
-  <section class="mb-10 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-6 text-center">
+  <section class="mb-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-6 text-center">
     <p class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
       觉得好用？给个 ⭐ 支持一下！
     </p>
@@ -249,6 +249,24 @@
       class="mt-3 inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
     >
       ⭐ Star on GitHub
+    </a>
+  </section>
+
+  <!-- Issue / feedback prompt -->
+  <section class="mb-10 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 p-6 text-center">
+    <p class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+      发现 bug？有好点子？欢迎提 issue
+    </p>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+      押韵不对、数据错漏、想加功能，都可以在 GitHub 告诉我
+    </p>
+    <a
+      href="https://github.com/QianyangPeng/chinese-rhyme-finder/issues/new"
+      target="_blank"
+      rel="noopener"
+      class="mt-3 inline-flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400"
+    >
+      提一个 Issue →
     </a>
   </section>
 
