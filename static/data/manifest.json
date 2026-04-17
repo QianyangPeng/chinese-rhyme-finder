@@ -1,291 +1,184 @@
 [
   {
-    "source": "chinese-poetry/song",
-    "file": "chinese-poetry-song.json",
-    "count": 5078,
-    "sizeKB": 1638.1
-  },
-  {
-    "source": "chinese-poetry/tang",
-    "file": "chinese-poetry-tang.json",
-    "count": 3267,
-    "sizeKB": 1198.8
-  },
-  {
     "source": "lyrics-hiphop",
     "file": "lyrics-hiphop-1.json",
-    "count": 22484,
-    "sizeKB": 7088.3,
+    "count": 22353,
+    "sizeKB": 7383.1,
     "chunk": 1
   },
   {
     "source": "lyrics-hiphop",
     "file": "lyrics-hiphop-2.json",
-    "count": 22484,
-    "sizeKB": 8484.5,
+    "count": 22353,
+    "sizeKB": 8581.7,
     "chunk": 2
   },
   {
     "source": "lyrics-hiphop",
     "file": "lyrics-hiphop-3.json",
-    "count": 22484,
-    "sizeKB": 8777.0,
+    "count": 8649,
+    "sizeKB": 3313.8,
     "chunk": 3
-  },
-  {
-    "source": "lyrics-hiphop",
-    "file": "lyrics-hiphop-4.json",
-    "count": 2685,
-    "sizeKB": 1063.2,
-    "chunk": 4
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-1.json",
-    "count": 23574,
-    "sizeKB": 6419.5,
+    "count": 23973,
+    "sizeKB": 6499.0,
     "chunk": 1
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-2.json",
-    "count": 23574,
-    "sizeKB": 6924.5,
+    "count": 23973,
+    "sizeKB": 7080.7,
     "chunk": 2
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-3.json",
-    "count": 23574,
-    "sizeKB": 6990.0,
+    "count": 23973,
+    "sizeKB": 6998.9,
     "chunk": 3
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-4.json",
-    "count": 23574,
-    "sizeKB": 6619.5,
+    "count": 23973,
+    "sizeKB": 7208.9,
     "chunk": 4
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-5.json",
-    "count": 23574,
-    "sizeKB": 8065.9,
+    "count": 23973,
+    "sizeKB": 8532.6,
     "chunk": 5
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-6.json",
-    "count": 23574,
-    "sizeKB": 8405.2,
+    "count": 23973,
+    "sizeKB": 7940.1,
     "chunk": 6
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-7.json",
-    "count": 23574,
-    "sizeKB": 7502.7,
+    "count": 23973,
+    "sizeKB": 7452.0,
     "chunk": 7
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-8.json",
-    "count": 23574,
-    "sizeKB": 7327.8,
+    "count": 23973,
+    "sizeKB": 7870.0,
     "chunk": 8
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-9.json",
-    "count": 23574,
-    "sizeKB": 7428.5,
+    "count": 23973,
+    "sizeKB": 8851.5,
     "chunk": 9
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-10.json",
-    "count": 23574,
-    "sizeKB": 9256.3,
+    "count": 23973,
+    "sizeKB": 8466.8,
     "chunk": 10
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-11.json",
-    "count": 23574,
-    "sizeKB": 7799.7,
+    "count": 23973,
+    "sizeKB": 8875.0,
     "chunk": 11
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-12.json",
-    "count": 23574,
-    "sizeKB": 8732.2,
+    "count": 23973,
+    "sizeKB": 8799.1,
     "chunk": 12
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-13.json",
-    "count": 23574,
-    "sizeKB": 8727.1,
+    "count": 23973,
+    "sizeKB": 8653.2,
     "chunk": 13
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-14.json",
-    "count": 23574,
-    "sizeKB": 8616.6,
+    "count": 23973,
+    "sizeKB": 8970.2,
     "chunk": 14
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-15.json",
-    "count": 23574,
-    "sizeKB": 8543.6,
+    "count": 23973,
+    "sizeKB": 9002.6,
     "chunk": 15
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-16.json",
-    "count": 23574,
-    "sizeKB": 8712.3,
+    "count": 23973,
+    "sizeKB": 8835.0,
     "chunk": 16
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-17.json",
-    "count": 23574,
-    "sizeKB": 8845.5,
+    "count": 23973,
+    "sizeKB": 9022.2,
     "chunk": 17
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-18.json",
-    "count": 23574,
-    "sizeKB": 8906.0,
+    "count": 23973,
+    "sizeKB": 9035.5,
     "chunk": 18
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-19.json",
-    "count": 23574,
-    "sizeKB": 8605.8,
+    "count": 23973,
+    "sizeKB": 9316.8,
     "chunk": 19
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-20.json",
-    "count": 23574,
-    "sizeKB": 8872.2,
+    "count": 23973,
+    "sizeKB": 9437.5,
     "chunk": 20
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-21.json",
-    "count": 23574,
-    "sizeKB": 8889.6,
+    "count": 23973,
+    "sizeKB": 9341.8,
     "chunk": 21
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-22.json",
-    "count": 23574,
-    "sizeKB": 8889.8,
+    "count": 23973,
+    "sizeKB": 8592.4,
     "chunk": 22
   },
   {
     "source": "lyrics-pop",
     "file": "lyrics-pop-23.json",
-    "count": 23574,
-    "sizeKB": 9411.4,
+    "count": 11548,
+    "sizeKB": 3982.2,
     "chunk": 23
-  },
-  {
-    "source": "lyrics-pop",
-    "file": "lyrics-pop-24.json",
-    "count": 23574,
-    "sizeKB": 9262.5,
-    "chunk": 24
-  },
-  {
-    "source": "lyrics-pop",
-    "file": "lyrics-pop-25.json",
-    "count": 23574,
-    "sizeKB": 9244.4,
-    "chunk": 25
-  },
-  {
-    "source": "lyrics-pop",
-    "file": "lyrics-pop-26.json",
-    "count": 23574,
-    "sizeKB": 8645.5,
-    "chunk": 26
-  },
-  {
-    "source": "lyrics-pop",
-    "file": "lyrics-pop-27.json",
-    "count": 11689,
-    "sizeKB": 4614.9,
-    "chunk": 27
-  },
-  {
-    "source": "moegirl-acg",
-    "file": "moegirl-acg-1.json",
-    "count": 21598,
-    "sizeKB": 5949.5,
-    "chunk": 1
-  },
-  {
-    "source": "moegirl-acg",
-    "file": "moegirl-acg-2.json",
-    "count": 14148,
-    "sizeKB": 4400.6,
-    "chunk": 2
-  },
-  {
-    "source": "opensubtitles-zh",
-    "file": "opensubtitles-zh-1.json",
-    "count": 21079,
-    "sizeKB": 5517.4,
-    "chunk": 1
-  },
-  {
-    "source": "opensubtitles-zh",
-    "file": "opensubtitles-zh-2.json",
-    "count": 21079,
-    "sizeKB": 5459.3,
-    "chunk": 2
-  },
-  {
-    "source": "opensubtitles-zh",
-    "file": "opensubtitles-zh-3.json",
-    "count": 21079,
-    "sizeKB": 5832.7,
-    "chunk": 3
-  },
-  {
-    "source": "opensubtitles-zh",
-    "file": "opensubtitles-zh-4.json",
-    "count": 10231,
-    "sizeKB": 2971.8,
-    "chunk": 4
-  },
-  {
-    "source": "wiktionary-slang",
-    "file": "wiktionary-slang.json",
-    "count": 274,
-    "sizeKB": 68.6
-  },
-  {
-    "source": "xinhua-idiom",
-    "file": "xinhua-idiom.json",
-    "count": 20191,
-    "sizeKB": 5223.0
-  },
-  {
-    "source": "xinhua-xiehouyu",
-    "file": "xinhua-xiehouyu.json",
-    "count": 6534,
-    "sizeKB": 1875.6
   }
 ]
