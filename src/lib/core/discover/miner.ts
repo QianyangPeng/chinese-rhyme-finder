@@ -99,70 +99,76 @@ function buildBuckets(
   return buckets;
 }
 
-/** Score a cluster's "cleverness". See DECISIONS.md D-006 for the
- *  rationale. Tuned for the mixed-corpus era (idioms + OpenSubtitles).
+/** Score a cluster's "cleverness".
  *
- *  Key signal added in 2026-04: **tail diversity**. When every member
- *  of a cluster shares the exact same last K characters (K = pattern
- *  length), they're template variants ("叫什么名字 / 你叫什么名字 /
- *  他叫什么名字") — not genuine rhyme discovery. Severely penalizes
- *  these so creative clusters like "相对华丽 / 洋洋得意 / 降维打击"
- *  rank above trivial pattern-fillers. */
+ *  Evolution notes:
+ *  - 2026-04 (early): added TAIL diversity (char-level + last-segment-level)
+ *    to kill template variants like "叫什么名字 / 你叫什么名字".
+ *  - 2026-04 (mid): noticed top-200 was 199× depth-4 and full of garbage
+ *    like "美丽的天地 / 美丽的间隙 / 美丽的园地" (shared prefix, only tail
+ *    varies = not real rhyme discovery). Added PREFIX diversity + CHAR-POOL
+ *    diversity. Rebalanced depth bonus so depth-3/5 can surface.
+ *
+ *  The four diversity signals now measured:
+ *    1. source diversity  — 成语+口语+ACG > pure-lyrics
+ *    2. tail diversity    — each member has a different ending
+ *    3. prefix diversity  — each member has a different opening
+ *    4. char-pool div     — unique chars across all members
+ *
+ *  A clever cluster scores high on ALL four. Templates score low on prefix.
+ *  Near-duplicates score low on char-pool.
+ */
 function scoreCluster(
   members: readonly ClusterMember[],
   lexicon: Lexicon,
   patternLength: number,
-  distinctTags: readonly string[]
+  _distinctTags: readonly string[]
 ): number {
-  // Average quality of member phrases, with a per-phrase penalty for
-  // repeated characters (反反复复, 打打杀杀 etc. — same-char repetition
-  // isn't clever rhyming, just reduplication).
+  // ── 1. Average member quality (with reduplication penalty) ───────────
   let qSum = 0;
   for (const m of members) {
     let q = lexicon.phrases[m.phraseId].quality;
     const chars = [...lexicon.phrases[m.phraseId].text];
     const uniqueRatio = new Set(chars).size / chars.length;
-    // uniqueRatio = 1.0 for all-distinct, 0.5 for 反反复复 (2 unique / 4)
-    // Penalize when < 0.75 (at least 25% repeated chars).
+    // 反反复复 (2 unique / 4 = 0.5) penalized; most phrases pass clean.
     if (uniqueRatio < 0.75) q *= 0.5 + uniqueRatio * 0.5;
     qSum += q;
   }
   const avgQuality = qSum / members.length;
 
-  // Source diversity: count distinct source values across members.
-  // A cluster mixing idioms + rap lyrics + pop is more interesting
-  // than one that's all pop-lyrics fragments.
+  // Min quality matters too — one bad apple shouldn't hide in an average.
+  let minQ = 1.0;
+  for (const m of members) {
+    const q = lexicon.phrases[m.phraseId].quality;
+    if (q < minQ) minQ = q;
+  }
+  // Blend: 70% avg + 30% min — a 0.3 outlier drags a 0.9-avg cluster down.
+  const quality = avgQuality * 0.7 + minQ * 0.3;
+
+  // ── 2. Source diversity (cross-register mixing is 惊艳) ──────────────
   const sources = new Set<string>();
   for (const m of members) sources.add(lexicon.phrases[m.phraseId].source);
-  // 1 source → 0.3, 2 → 0.6, 3+ → 1.0
-  const diversity = Math.min(sources.size, 3) / 3;
+  const srcDiv = sources.size === 1 ? 0.3
+    : sources.size === 2 ? 0.7
+    : sources.size === 3 ? 1.2
+    : 1.6;
 
-  // Mild depth nudge — deeper rhymes get a small bonus but DON'T
-  // dominate. A great 2-push (q=0.95) beats a mediocre 4-push (q=0.7).
-  //   1押: 1.0,  2押: 1.1,  3押: 1.2,  4押: 1.3,  5押: 1.4
-  // Old formula (log2) gave 2押=1.58, 4押=2.32 — way too aggressive.
-  const lengthBonus = 1 + 0.1 * (patternLength - 1);
+  // ── 3. Depth bonus ───────────────────────────────────────────────────
+  // Two-phase: a gentle curve for 2→4 (they're all easy to rhyme in
+  // Chinese — 4-char idioms are the natural density), then a steeper
+  // rise at 5+ because depth-5 matches are hard to find in nature and
+  // deserve to surface against the depth-4 flood.
+  //   2押: 1.00, 3押: 1.18, 4押: 1.30, 5押: 1.52, 6押: 1.68, 7押: 1.78
+  const lengthBonus = patternLength <= 4
+    ? 1 + 0.18 * Math.log2(patternLength - 1)
+    : 1.30 + 0.22 * Math.log2(patternLength - 3);
 
-  // Member count: enough to be browsable but capped (clusters of 50
-  // shouldn't overshadow tighter ones with 4 sharp members).
-  const memberBonus = Math.min(members.length, 8) / 8;
+  // ── 4. Member count (flat — we don't want huge clusters crushing
+  //      tight deep ones) ──────────────────────────────────────────────
+  //  3: 0.61, 4: 0.64, 6: 0.68, 10: 0.73, 20: 0.80
+  const memberBonus = 0.5 + 0.07 * Math.log2(members.length);
 
-  // ── Diversity penalties ─────────────────────────────────────────────
-  //
-  // Two levels of tail-sameness detection:
-  //
-  // 1. CHAR-LEVEL tail: last K literal characters (K = patternLength).
-  //    Catches "叫什么名字 / 你叫什么名字 / 他叫什么名字" (all share
-  //    exact "什么名字" as tail text).
-  //
-  // 2. WORD-LEVEL last segment: the last jieba token (via phrase.segments).
-  //    Catches "活着的时候 / 开车的时候 / 唱歌的时候" — their last-4 chars
-  //    differ ('着的时候' vs '车的时候') but the meaningful last WORD is
-  //    the same: '时候'. Same for X先生, X自己, X意思 patterns.
-  //
-  // We take the MINIMUM of the two diversity ratios to penalize clusters
-  // that are template-like on either dimension.
-
+  // ── 5. Tail diversity (char-level + last-content-segment-level) ──────
   const tailTexts = new Set<string>();
   const lastSegTexts = new Set<string>();
   for (const m of members) {
@@ -170,15 +176,11 @@ function scoreCluster(
     const chars = [...phrase.text];
     tailTexts.add(chars.slice(Math.max(0, chars.length - patternLength)).join(''));
 
-    // Last content segment (skip trailing function words like 的/了/啊).
     const segs = phrase.segments;
     if (segs && segs.length > 0) {
-      // Walk backwards to find the last non-particle segment.
       let lastSeg = segs[segs.length - 1].text;
       for (let si = segs.length - 1; si >= 0; si--) {
         const pos = segs[si].pos;
-        // Skip pure function words: particles (u*), auxiliaries (y),
-        // modal (e), interjections (o), punctuation (x), conjunctions (c)
         if (!'uyeoxc'.includes(pos[0])) {
           lastSeg = segs[si].text;
           break;
@@ -186,25 +188,81 @@ function scoreCluster(
       }
       lastSegTexts.add(lastSeg);
     } else {
-      // No segments (seed entries) — use last 2 chars as proxy.
       lastSegTexts.add(chars.slice(-2).join(''));
     }
   }
-
-  const charTailDiv = tailTexts.size / members.length;
-  const segTailDiv = lastSegTexts.size / members.length;
-  // Use the harsher of the two signals, floored at 0.12.
-  const rawTailDiv = Math.max(Math.min(charTailDiv, segTailDiv), 0.12);
-
-  // Disable tailDiv for 2-push: at depth 2 with medial stripping there
-  // are only ~20 unique rhyme keys → 400 possible pairs → each pattern
-  // has thousands of members sharing tails. Penalizing them kills ALL
-  // 2-push clusters. For depth 3, soften. For 4+, full penalty.
+  const rawTailDiv = Math.max(
+    Math.min(tailTexts.size / members.length, lastSegTexts.size / members.length),
+    0.12
+  );
+  // Depth 2 has too few possible tails to penalize; soften depth 3.
   const tailDiv = patternLength <= 2 ? 1.0
     : patternLength === 3 ? Math.pow(rawTailDiv, 0.5)
     : rawTailDiv;
 
-  return avgQuality * (0.5 + diversity) * lengthBonus * memberBonus * tailDiv;
+  // ── 6. Prefix diversity (first non-rhyming segment) ──────────────────
+  // Catches templates like "美丽的天地 / 美丽的间隙 / 美丽的园地" where
+  // everyone shares "美丽的" and only the tail varies. prefixDiv counts
+  // unique FIRST content segments; if members share a prefix, ratio drops.
+  //
+  // For short phrases (length == patternLength), there IS no prefix — the
+  // whole phrase is the rhyming part, so prefix diversity is undefined.
+  // In that case we fall back to the whole-phrase identity (1 per unique).
+  const prefixTexts = new Set<string>();
+  for (const m of members) {
+    const phrase = lexicon.phrases[m.phraseId];
+    const chars = [...phrase.text];
+    const prefixLen = chars.length - patternLength;
+    if (prefixLen <= 0) {
+      // Whole phrase IS the rhyme — use the phrase text itself as identity.
+      prefixTexts.add(phrase.text);
+      continue;
+    }
+    // Prefer the FIRST content segment; fall back to first char.
+    const segs = phrase.segments;
+    let firstSeg: string | null = null;
+    if (segs && segs.length > 0) {
+      for (const s of segs) {
+        if (!'uyeoxc'.includes(s.pos[0])) {
+          firstSeg = s.text;
+          break;
+        }
+      }
+    }
+    prefixTexts.add(firstSeg ?? chars.slice(0, Math.min(2, prefixLen)).join(''));
+  }
+  const rawPrefixDiv = Math.max(prefixTexts.size / members.length, 0.2);
+  // Full penalty at depth 4+, soften at 2-3.
+  const prefixDiv = patternLength <= 2 ? 1.0
+    : patternLength === 3 ? Math.pow(rawPrefixDiv, 0.5)
+    : rawPrefixDiv;
+
+  // ── 7. Char-pool diversity (how much unique vocabulary is in the pool) ─
+  // "美丽的天地 / 美丽的间隙 / 美丽的园地" = ~8 unique chars across 15
+  //     → ratio 0.53 (template, penalized)
+  // "基本基础没有打好 / 寂寞人最后法宝 / 没有打扰" = 15/17
+  //     → ratio 0.88 (diverse, rewarded)
+  const charPool = new Set<string>();
+  let totalChars = 0;
+  for (const m of members) {
+    for (const c of lexicon.phrases[m.phraseId].text) {
+      charPool.add(c);
+      totalChars++;
+    }
+  }
+  const charPoolRatio = charPool.size / Math.max(totalChars, 1);
+  // Map ratio to a 0.5–1.2 multiplier: 0.4 → 0.5, 0.7 → 1.0, 1.0 → 1.2.
+  const charPoolDiv = Math.max(0.5, Math.min(1.2, 0.5 + (charPoolRatio - 0.4) * 1.17));
+
+  return (
+    quality *
+    (0.5 + srcDiv) *
+    lengthBonus *
+    memberBonus *
+    tailDiv *
+    prefixDiv *
+    charPoolDiv
+  );
 }
 
 /**
