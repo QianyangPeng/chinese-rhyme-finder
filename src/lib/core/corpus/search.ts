@@ -12,6 +12,7 @@ import type { Lexicon, PhraseRecord } from './types.js';
 import type { RhymeScheme } from '../rhyme/types.js';
 import { matchFullKeys, matchTailKeys, type RhymeMatch } from '../rhyme/matcher.js';
 import { composeKey, type ToneMode } from '../rhyme/tone.js';
+import type { Tone } from '../pinyin/types.js';
 
 export interface SearchHit {
   /** The matched phrase. */
@@ -30,7 +31,8 @@ export interface SearchBucket {
 }
 
 export interface SearchResult {
-  /** Length of the target final sequence — only same-length phrases are considered. */
+  /** Length of the target final sequence. Same-length phrases are
+   *  compared in full; longer phrases are matched by their tail. */
   readonly targetLength: number;
   /** Buckets in level order. Empty bins are dropped. */
   readonly buckets: readonly SearchBucket[];
@@ -63,9 +65,14 @@ export interface SearchOptions {
 const DEFAULT_MAX_PER_BUCKET = 50;
 
 /**
- * Search the lexicon for phrases of the same length whose finals match
- * the target under `scheme`. Hits are bucketed by mismatch count
- * (relaxation level) — Level 0 = strict full rhyme, Level k = k-off.
+ * Search the lexicon for phrases whose finals match the target under
+ * `scheme`. Same-length phrases are compared position-by-position;
+ * longer phrases are matched by their TAIL (last N syllables, where
+ * N = target length). This means searching "星空" (2 syllables) will
+ * also find "满天星空" (4 syllables) if the last 2 syllables rhyme.
+ *
+ * Hits are bucketed by mismatch count (relaxation level) — Level 0 =
+ * strict full match, Level k = k positions off.
  */
 export function searchByFinals(
   target: readonly string[],
@@ -83,40 +90,84 @@ export function searchByFinals(
 
   // Pre-compose target keys with tone info if requested.
   const targetKeys = target.map((f, i) =>
-    composeKey(f, targetTones?.[i] ?? 0, scheme, toneMode)
+    composeKey(f, (targetTones?.[i] ?? 0) as Tone, scheme, toneMode)
   );
-
-  // We only consider phrases of the same length under FULL mode.
-  const candidateIds = lexicon.byLength.get(targetLength) ?? [];
 
   const buckets: Array<SearchHit[]> = Array.from(
     { length: targetLength + 1 },
     () => []
   );
 
-  for (const id of candidateIds) {
+  // Track which phrase IDs we've already matched (same-length pass) so
+  // we don't add them again in the longer-phrase pass.
+  const seen = new Set<number>();
+
+  // ── Pass 1: same-length phrases (full positional match) ────────────
+  const sameLengthIds = lexicon.byLength.get(targetLength) ?? [];
+  for (const id of sameLengthIds) {
     const phrase = lexicon.phrases[id];
     if (excludeText !== undefined && phrase.text === excludeText) continue;
 
     const candKeys = phrase.finals.map((f, i) =>
-      composeKey(f, phrase.tones?.[i] ?? 0, scheme, toneMode)
+      composeKey(f, (phrase.tones?.[i] ?? 0) as Tone, scheme, toneMode)
     );
     const match = matchFullKeys(targetKeys, candKeys);
     if (!match) continue;
     if (match.relaxationLevel > maxLevel) continue;
     // If the user wants the end to rhyme (default), drop candidates
-    // whose last position didn't match. A relaxation of Level 1
-    // "where position 3 is the off one" is what the user complained about.
+    // whose last position didn't match.
     if (requireTailMatch && targetLength > 0) {
       const last = match.perPosition.length - 1;
       if (last >= 0 && !match.perPosition[last]) continue;
     }
 
+    seen.add(id);
     buckets[match.relaxationLevel].push({
       phrase,
       match,
       level: match.relaxationLevel
     });
+  }
+
+  // ── Pass 2: longer phrases — match their TAIL against the target ───
+  // For each phrase longer than the target, extract the last N rhyme
+  // keys and compare them against the full target. This allows "星空"
+  // to match "满天星空" where the last 2 syllables rhyme.
+  if (targetLength > 0) {
+    for (const [phraseLen, ids] of lexicon.byLength) {
+      if (phraseLen <= targetLength) continue;
+      for (const id of ids) {
+        if (seen.has(id)) continue;
+        const phrase = lexicon.phrases[id];
+        if (excludeText !== undefined && phrase.text === excludeText) continue;
+
+        // Compose keys for the candidate's TAIL only (last targetLength syllables).
+        const offset = phrase.length - targetLength;
+        const tailKeys: string[] = new Array(targetLength);
+        for (let i = 0; i < targetLength; i++) {
+          tailKeys[i] = composeKey(
+            phrase.finals[offset + i],
+            (phrase.tones?.[offset + i] ?? 0) as Tone,
+            scheme,
+            toneMode
+          );
+        }
+
+        const match = matchFullKeys(targetKeys, tailKeys);
+        if (!match) continue;
+        if (match.relaxationLevel > maxLevel) continue;
+        if (requireTailMatch && targetLength > 0) {
+          const last = match.perPosition.length - 1;
+          if (last >= 0 && !match.perPosition[last]) continue;
+        }
+
+        buckets[match.relaxationLevel].push({
+          phrase,
+          match,
+          level: match.relaxationLevel
+        });
+      }
+    }
   }
 
   const out: SearchBucket[] = [];
@@ -212,7 +263,7 @@ export function searchByTail(
   }
 
   const targetKeys = target.map((f, i) =>
-    composeKey(f, targetTones?.[i] ?? 0, scheme, toneMode)
+    composeKey(f, (targetTones?.[i] ?? 0) as Tone, scheme, toneMode)
   );
 
   // Work out the longest possible tail K for this target under the scheme.
@@ -225,7 +276,7 @@ export function searchByTail(
   for (const phrase of lexicon.phrases) {
     if (excludeText !== undefined && phrase.text === excludeText) continue;
     const candKeys = phrase.finals.map((f, i) =>
-      composeKey(f, phrase.tones?.[i] ?? 0, scheme, toneMode)
+      composeKey(f, (phrase.tones?.[i] ?? 0) as Tone, scheme, toneMode)
     );
     // Try the deepest possible match first; if it fully matches we stop.
     const window = Math.min(targetLength, phrase.length);

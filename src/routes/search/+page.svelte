@@ -127,7 +127,7 @@
   <header class="mb-6">
     <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">找押韵</h1>
     <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
-      输入一个词组，从内置词库中查找等长且押韵的候选 — 按"严格 → 宽松"分层展示。
+      输入一个词组，从内置词库中查找押韵的候选（包括尾部匹配的长词）— 按"严格 → 宽松"分层展示。
     </p>
   </header>
 
@@ -221,8 +221,7 @@
   <p class="mt-3 text-xs text-zinc-500">
     词库：内置 <span class="font-mono">{lexicon.phrases.length}</span> 条 ·
     {#if mode === 'full'}
-      <span class="font-mono">{lexicon.byLength.get(queryFinals.length)?.length ?? 0}</span>
-      条等长候选
+      匹配等长及尾部押韵的长词
     {:else}
       尾押模式不限长度
     {/if}

@@ -45,7 +45,8 @@
     'opensubtitles-zh':    { label: '口语', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200' },
     'lyrics-hiphop':       { label: '说唱', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' },
     'lyrics-pop':          { label: '歌词', cls: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-200' },
-    'moegirl-acg':         { label: 'ACG', cls: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-200' }
+    'moegirl-acg':         { label: 'ACG', cls: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-200' },
+    'cedict':              { label: '词典', cls: 'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-200' }
   };
 
   function sourceBadge(source: string): { label: string; cls: string } {
@@ -92,6 +93,7 @@
   // Classical sources default off; modern sources default on.
   const SOURCE_TOGGLES: Array<{ id: string; label: string; defaultOn: boolean }> = [
     { id: 'xinhua-idiom',        label: '成语', defaultOn: true },
+    { id: 'cedict',              label: '词典', defaultOn: true },
     { id: 'opensubtitles-zh',    label: '口语', defaultOn: true },
     { id: 'wiktionary-slang',    label: '网络', defaultOn: true },
     { id: 'lyrics-hiphop',       label: '说唱', defaultOn: true },
@@ -200,7 +202,7 @@
   // (~500KB), render instantly. When user has custom source toggles →
   // fall back to runtime miner with spinner.
 
-  const DEFAULT_ON_SOURCES = new Set(['xinhua-idiom', 'opensubtitles-zh', 'wiktionary-slang', 'lyrics-hiphop', 'lyrics-pop', 'moegirl-acg']);
+  const DEFAULT_ON_SOURCES = new Set(['xinhua-idiom', 'cedict', 'opensubtitles-zh', 'wiktionary-slang', 'lyrics-hiphop', 'lyrics-pop', 'moegirl-acg']);
 
   function isDefaultSourceConfig(): boolean {
     for (const toggle of SOURCE_TOGGLES) {

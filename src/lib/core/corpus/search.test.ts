@@ -35,12 +35,13 @@ describe('searchByFinals · strict matches', () => {
     expect(texts).toContain('降维打击');
   });
 
-  it('returns same-length results only', () => {
+  it('returns same-length AND longer tail-matched results', () => {
     const target = ['iang', 'uei', 'a', 'i']; // length 4
     const r = searchByFinals(target, strictScheme, lex);
+    // All hits must be at least as long as the target
     for (const bucket of r.buckets) {
       for (const hit of bucket.hits) {
-        expect(hit.phrase.length).toBe(4);
+        expect(hit.phrase.length).toBeGreaterThanOrEqual(4);
       }
     }
     expect(r.targetLength).toBe(4);

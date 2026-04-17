@@ -58,6 +58,8 @@ SOURCE_REGISTRY: dict[str, str] = {
     "zh:lyrics_pop":       "pipeline.sources.zh.lyrics_pop",
     # ── ACG / internet culture ─────────────────────────────────────────
     "zh:moegirl":          "pipeline.sources.zh.moegirl",
+    # ── Dictionary (common 2-3 char words) ──────────────────────────────
+    "zh:cedict":           "pipeline.sources.zh.cedict",
     # ── Large-corpus mining (freq-based extraction) ──────────────────────
     "zh:opensubtitles":    "pipeline.sources.zh.opensubtitles",
     # Future:

@@ -143,6 +143,13 @@
       color: 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30',
       license: 'CC-BY-SA'
     },
+    {
+      id: 'cedict',
+      label: '词典',
+      desc: 'CC-CEDICT 开源中英词典 — 8万+ 基础2-3字常用词',
+      color: 'border-lime-300 bg-lime-50 dark:border-lime-800 dark:bg-lime-950/30',
+      license: 'CC-BY-SA'
+    },
   ];
 </script>
 
