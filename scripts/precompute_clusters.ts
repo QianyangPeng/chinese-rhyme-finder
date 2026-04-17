@@ -31,6 +31,7 @@ const OUT_DIR = join(DATA_DIR, 'clusters');
 // Default ON sources (matches Discover UI defaults).
 const DEFAULT_SOURCES = new Set([
   'xinhua-idiom',
+  'cedict',
   'opensubtitles-zh',
   'wiktionary-slang',
   'lyrics-hiphop',
