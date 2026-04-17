@@ -3,6 +3,7 @@
   import type { ToneMode } from '$lib/core/rhyme';
   import { reverseAnalyze } from '$lib/core/analyze';
   import { base } from '$app/paths';
+  import { t } from '$lib/stores/lang.svelte';
 
   // Default text — the famous three-line "年轻的国王们" passage.
   const DEFAULT_TEXT = `观众们拍手叫好剪裁的相对华丽
@@ -109,9 +110,12 @@
   /**
    * Compute a per-line rhyme badge: "N押" for the deepest positional
    * match, "句内韵" if internal groups exist, "头韵" if head matches.
+   * Returns {type, label} pairs so the template can color-code by type
+   * in either language.
    */
-  function lineBadges(lineIndex: number): string[] {
-    const badges: string[] = [];
+  type BadgeType = 'tail' | 'head' | 'internal' | 'midline';
+  function lineBadges(lineIndex: number): Array<{ type: BadgeType; label: string }> {
+    const badges: Array<{ type: BadgeType; label: string }> = [];
 
     // Tail depth (N-push)
     let maxTailK = 0;
@@ -120,7 +124,7 @@
         if (p.tailK > maxTailK) maxTailK = p.tailK;
       }
     }
-    if (maxTailK >= 1) badges.push(`${maxTailK}押`);
+    if (maxTailK >= 1) badges.push({ type: 'tail', label: t(`${maxTailK}押`, `${maxTailK}-rhyme`) });
 
     // Head rhyme
     let hasHead = false;
@@ -130,11 +134,11 @@
         break;
       }
     }
-    if (hasHead) badges.push('头韵');
+    if (hasHead) badges.push({ type: 'head', label: t('头韵', 'head-rhyme') });
 
     // Internal rhyme
     const line = analysis.lines[lineIndex];
-    if (line.internalGroups.size > 0) badges.push('句内韵');
+    if (line.internalGroups.size > 0) badges.push({ type: 'internal', label: t('句内韵', 'internal-rhyme') });
 
     // Mid-line rhyme: any non-tail, non-head position matches
     let hasMidLine = false;
@@ -147,10 +151,17 @@
         break;
       }
     }
-    if (hasMidLine) badges.push('句中韵');
+    if (hasMidLine) badges.push({ type: 'midline', label: t('句中韵', 'mid-line-rhyme') });
 
     return badges;
   }
+
+  const BADGE_CLS: Record<BadgeType, string> = {
+    tail:     'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
+    head:     'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200',
+    internal: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+    midline:  'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+  };
 
   const internalRhymeLineCount = $derived(
     analysis.lines.filter((l) => l.internalGroups.size > 0).length
@@ -201,20 +212,20 @@
 </script>
 
 <svelte:head>
-  <title>歌词分析 · 世界最强押韵</title>
+  <title>{t('歌词分析 · 世界最强押韵', 'Analyze · Rhyme Finder')}</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">歌词分析</h1>
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{t('歌词分析', 'Analyze')}</h1>
     <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
-      把歌词粘进来，看每行押什么、和哪些行相互押。
+      {t('把歌词粘进来，看每行押什么、和哪些行相互押。', 'Paste lyrics to see what rhymes in each line and which lines rhyme together.')}
     </p>
   </header>
 
   <!-- Preset chips -->
   <div class="mb-3 flex flex-wrap gap-2 text-xs">
-    <span class="text-zinc-500">示例：</span>
+    <span class="text-zinc-500">{t('示例：', 'Examples:')}</span>
     {#each PRESETS as preset (preset.name)}
       <button
         class="rounded border border-zinc-300 dark:border-zinc-700 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
@@ -227,7 +238,7 @@
 
   <!-- Tone-mode selector: how strict should声调 matter for a rhyme? -->
   <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
-    <span class="text-zinc-500">声调：</span>
+    <span class="text-zinc-500">{t('声调：', 'Tone:')}</span>
     {#each TONE_MODES as m (m)}
       <button
         class="rounded border px-2.5 py-1 text-xs transition {toneMode === m
@@ -235,10 +246,10 @@
           : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
         title={
           m === 'none'
-            ? '只比 韵母 — 最常见的 rap 判准'
+            ? t('只比 韵母 — 最常见的 rap 判准', 'Only rhyme finals — the common rap standard')
             : m === 'pingze'
-              ? '韵母 + 平仄 — 平(1/2)与仄(3/4/0)不通押'
-              : '韵母 + 声调数字 — 每个音节声调必须一致'
+              ? t('韵母 + 平仄 — 平(1/2)与仄(3/4/0)不通押', 'Rhyme + ping/ze — level tones (1/2) vs oblique tones (3/4/0) do not rhyme')
+              : t('韵母 + 声调数字 — 每个音节声调必须一致', 'Rhyme + exact tone number — every tone must match')
         }
         onclick={() => (toneMode = m)}
       >
@@ -252,28 +263,28 @@
     bind:value={text}
     rows={6}
     class="block w-full rounded-md border border-zinc-300 dark:border-zinc-700 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-    placeholder="粘贴几行歌词或诗句…"
+    placeholder={t('粘贴几行歌词或诗句…', 'Paste a few lines of lyrics or poetry…')}
   ></textarea>
 
   <!-- Top-line stats -->
   <section class="mt-6 grid gap-3 sm:grid-cols-3">
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-      <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">最强尾押</p>
+      <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">{t('最强尾押', 'Max tail depth')}</p>
       <p class="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-        {analysis.maxTailK} <span class="text-base font-normal text-zinc-500">押</span>
+        {analysis.maxTailK} <span class="text-base font-normal text-zinc-500">{t('押', '-rhyme')}</span>
       </p>
     </div>
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-      <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">行数</p>
+      <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">{t('行数', 'Lines')}</p>
       <p class="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{analysis.lines.length}</p>
     </div>
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-      <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">押韵组</p>
+      <p class="font-mono text-xs uppercase tracking-wider text-zinc-500">{t('押韵组', 'Rhyme groups')}</p>
       <p class="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{analysis.groups.length}</p>
       {#if analysis.groups.length > 0}
         <p class="mt-1 text-xs text-zinc-500">
           {analysis.groups
-            .map((g) => `${g.lineIndices.length}行同${g.rhymeKey || '?'}`)
+            .map((g) => t(`${g.lineIndices.length}行同${g.rhymeKey || '?'}`, `${g.lineIndices.length} lines on ${g.rhymeKey || '?'}`))
             .join(' · ')}
         </p>
       {/if}
@@ -282,15 +293,18 @@
 
   {#if internalRhymeLineCount > 0}
     <p class="-mt-2 mb-4 text-xs text-zinc-500">
-      其中 <span class="font-semibold text-zinc-700 dark:text-zinc-300">{internalRhymeLineCount}</span> 行有内部重复押韵（同行多位同韵，不只末尾）— 浅色色块标出。
+      {t(
+        `其中 ${internalRhymeLineCount} 行有内部重复押韵（同行多位同韵，不只末尾）— 浅色色块标出。`,
+        `${internalRhymeLineCount} line${internalRhymeLineCount === 1 ? ' has' : 's have'} internal rhyme (same rhyme at multiple positions within a line) — shown with faded chips.`
+      )}
     </p>
   {/if}
 
   <!-- Per-line view with color-coded chips -->
   <section class="mt-6">
-    <h2 class="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">逐行解读</h2>
+    <h2 class="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t('逐行解读', 'Line-by-line')}</h2>
     {#if analysis.lines.every((l) => l.syllables.length === 0)}
-      <p class="text-sm text-zinc-500">输入区还没有可分析的中文音节。</p>
+      <p class="text-sm text-zinc-500">{t('输入区还没有可分析的中文音节。', 'No Chinese syllables to analyze in the input.')}</p>
     {:else}
       <div class="space-y-3">
         {#each analysis.lines as line (line.index)}
@@ -302,7 +316,7 @@
           >
             <div class="mb-2 flex items-baseline gap-3">
               <span class="font-mono text-xs text-zinc-400">L{line.index + 1}</span>
-              <span class="text-sm text-zinc-700 dark:text-zinc-300">{line.text || '（空行）'}</span>
+              <span class="text-sm text-zinc-700 dark:text-zinc-300">{line.text || t('（空行）', '(empty line)')}</span>
             </div>
             {#if line.syllables.length > 0}
               <!-- Rhyme type badges -->
@@ -310,12 +324,8 @@
               {#if badges.length > 0}
                 <div class="mb-1.5 flex flex-wrap gap-1">
                   {#each badges as badge}
-                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold
-                      {badge.includes('押') ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' :
-                       badge === '头韵' ? 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' :
-                       badge === '句内韵' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' :
-                       'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'}">
-                      {badge}
+                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold {BADGE_CLS[badge.type]}">
+                      {badge.label}
                     </span>
                   {/each}
                 </div>
@@ -338,7 +348,7 @@
                 {/each}
               </div>
             {:else}
-              <p class="text-xs text-zinc-400">（无中文音节）</p>
+              <p class="text-xs text-zinc-400">{t('（无中文音节）', '(no Chinese syllables)')}</p>
             {/if}
           </div>
         {/each}
@@ -349,9 +359,9 @@
   <!-- Pair matrix (if more than one rhyming pair) -->
   {#if analysis.pairs.length > 0}
     <section class="mt-6">
-      <h2 class="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">行对行押韵深度</h2>
+      <h2 class="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t('行对行押韵深度', 'Line-by-line rhyme depth matrix')}</h2>
       <p class="mb-3 text-xs text-zinc-500">
-        每格两个数：尾押 / 头押。0 表示无押韵。
+        {t('每格两个数：尾押 / 头押。0 表示无押韵。', 'Each cell: tail depth / head depth. 0 means no rhyme.')}
       </p>
       <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <table class="w-full text-xs">
@@ -404,7 +414,7 @@
   <footer class="mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
       <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">
-        返回主页
+        {t('返回主页', 'Back to home')}
       </a>
       ·
       <a

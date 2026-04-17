@@ -4,6 +4,7 @@
   import TopNav from '$lib/components/TopNav.svelte';
   import GlobalKeyboard from '$lib/components/GlobalKeyboard.svelte';
   import KeyboardHelp from '$lib/components/KeyboardHelp.svelte';
+  import { t } from '$lib/stores/lang.svelte';
   let { children } = $props();
 </script>
 
@@ -19,7 +20,7 @@
         class="h-8 w-8 rounded-full border-[3px] border-zinc-200 dark:border-zinc-700 border-t-zinc-600 dark:border-t-zinc-300"
         style="animation: spin 0.7s linear infinite"
       ></div>
-      <p class="text-sm">加载中…</p>
+      <p class="text-sm">{t('加载中…', 'Loading…')}</p>
     </div>
   </div>
 {/if}

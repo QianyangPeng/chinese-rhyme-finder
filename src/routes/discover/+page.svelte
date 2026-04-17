@@ -11,6 +11,17 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { favorites } from '$lib/stores/favorites.svelte';
+  import { t } from '$lib/stores/lang.svelte';
+
+  /** Phrase ID that was most recently copied (for tick feedback on member cards). */
+  let copiedPhraseId = $state<number | null>(null);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+  function copyPhrase(phraseId: number, text: string) {
+    copyText(text);
+    copiedPhraseId = phraseId;
+    if (copiedTimer) clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { copiedPhraseId = null; }, 1200);
+  }
 
   /** Svelte action: calls `callback` when element enters viewport. */
   function observeIntersection(node: HTMLElement, callback: () => void) {
@@ -463,28 +474,31 @@
 </script>
 
 <svelte:head>
-  <title>押韵灵感 · 世界最强押韵</title>
+  <title>{t('押韵灵感 · 世界最强押韵', 'Discover · Rhyme Finder')}</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
     <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-      押韵灵感
+      {t('押韵灵感', 'Discover')}
     </h1>
     <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
-      算法挖掘出来的押韵 cluster — 按巧妙度排序。每组里所有短语能套到同一个韵脚。
+      {t(
+        '算法挖掘出来的押韵 cluster — 按巧妙度排序。每组里所有短语能套到同一个韵脚。',
+        'Algorithm-mined rhyme clusters, sorted by cleverness. Every phrase in a group shares the same rhyme tail.'
+      )}
     </p>
   </header>
 
   <!-- Lexicon status -->
   <!-- Incremental loading status -->
   <div class="mb-5 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-xs text-zinc-700 dark:text-zinc-300">
-    词库 <span class="font-semibold">{totalPhrasesInCorpus > 0 ? totalPhrasesInCorpus.toLocaleString() : '加载中…'}</span> 条
+    {t('词库', 'Corpus')} <span class="font-semibold">{totalPhrasesInCorpus > 0 ? totalPhrasesInCorpus.toLocaleString() : t('加载中…', 'Loading…')}</span> {t('条', 'phrases')}
     {#if usingPrecomputed}
-      <span class="text-emerald-600 dark:text-emerald-400">（预算数据，秒开）</span>
+      <span class="text-emerald-600 dark:text-emerald-400">{t('（预算数据，秒开）', '(pre-computed, instant)')}</span>
     {:else if loadedSourceCount > 0}
       <span class="text-emerald-600 dark:text-emerald-400">
-        （{loadedSourceCount} 个语料源已加载）
+        {t(`（${loadedSourceCount} 个语料源已加载）`, `(${loadedSourceCount} source${loadedSourceCount === 1 ? '' : 's'} loaded)`)}
       </span>
     {/if}
   </div>
@@ -497,53 +511,53 @@
         : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
       onclick={() => (lens = lens === 'saved' ? 'featured' : 'saved')}
     >
-      {lens === 'saved' ? '❤️ 查看全部' : '❤️ 我的收藏'}
+      {lens === 'saved' ? t('❤️ 查看全部', '❤️ Show all') : t('❤️ 我的收藏', '❤️ Favorites')}
     </button>
   </div>
 
   <!-- Controls -->
   <div class="mb-6 grid gap-3 sm:grid-cols-4">
     <div>
-      <p class="mb-1 text-xs text-zinc-500">严格度</p>
+      <p class="mb-1 text-xs text-zinc-500">{t('严格度', 'Strictness')}</p>
       <div class="flex flex-wrap gap-1">
         <button
           class="rounded border px-2 py-1 text-xs transition {toneMode === 'none'
             ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
             : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
           onclick={() => (toneMode = 'none')}
-          title="仅比较韵母"
+          title={t('仅比较韵母', 'Rhyme only (ignore tones)')}
         >
-          韵母
+          {t('韵母', 'Rhyme')}
         </button>
         <button
           class="rounded border px-2 py-1 text-xs transition {toneMode === 'exact'
             ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
             : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
           onclick={() => (toneMode = 'exact')}
-          title="韵母+声调都必须一致"
+          title={t('韵母+声调都必须一致', 'Rhyme and tone must both match')}
         >
-          韵母+声调
+          {t('韵母+声调', 'Rhyme + Tone')}
         </button>
       </div>
     </div>
     <div>
-      <p class="mb-1 text-xs text-zinc-500">押韵字数</p>
+      <p class="mb-1 text-xs text-zinc-500">{t('押韵字数', 'Rhyme depth')}</p>
       <select
         bind:value={selectedDepth}
         class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs"
       >
-        <option value={0}>全部</option>
-        <option value={2}>双押</option>
-        <option value={3}>三押</option>
-        <option value={4}>四押</option>
-        <option value={5}>五押</option>
-        <option value={6}>六押</option>
-        <option value={7}>七押</option>
-        <option value={8}>八押</option>
+        <option value={0}>{t('全部', 'All')}</option>
+        <option value={2}>{t('双押', '2-rhyme')}</option>
+        <option value={3}>{t('三押', '3-rhyme')}</option>
+        <option value={4}>{t('四押', '4-rhyme')}</option>
+        <option value={5}>{t('五押', '5-rhyme')}</option>
+        <option value={6}>{t('六押', '6-rhyme')}</option>
+        <option value={7}>{t('七押', '7-rhyme')}</option>
+        <option value={8}>{t('八押', '8-rhyme')}</option>
       </select>
     </div>
     <div>
-      <p class="mb-1 text-xs text-zinc-500">最少成员</p>
+      <p class="mb-1 text-xs text-zinc-500">{t('最少成员', 'Min members')}</p>
       <select
         bind:value={minMembers}
         class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs"
@@ -555,7 +569,7 @@
       </select>
     </div>
     <div>
-      <p class="mb-1 text-xs text-zinc-500">扫描位置</p>
+      <p class="mb-1 text-xs text-zinc-500">{t('扫描位置', 'Scan position')}</p>
       <div class="flex gap-1">
         <button
           class="rounded border px-2 py-1 text-xs transition {tailOnly
@@ -563,7 +577,7 @@
             : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
           onclick={() => (tailOnly = true)}
         >
-          仅尾部
+          {t('仅尾部', 'Tail only')}
         </button>
         <button
           class="rounded border px-2 py-1 text-xs transition {!tailOnly
@@ -571,7 +585,7 @@
             : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900'}"
           onclick={() => (tailOnly = false)}
         >
-          全位置
+          {t('全位置', 'Anywhere')}
         </button>
       </div>
     </div>
@@ -579,14 +593,14 @@
 
   <!-- Per-source toggles: each corpus has its own on/off badge. -->
   <div class="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
-    <span class="text-zinc-500 mr-1">语料源：</span>
+    <span class="text-zinc-500 mr-1">{t('语料源：', 'Sources:')}</span>
     {#each SOURCE_TOGGLES as src (src.id)}
       {@const badge = sourceBadge(src.id)}
       <button
         class="rounded px-2 py-1 font-mono text-[10px] transition select-none {enabledSources[src.id]
           ? `${badge.cls} ring-1 ring-current`
           : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 line-through'}"
-        title="{src.label} ({src.id}) — 点击切换"
+        title="{src.label} ({src.id}) — {t('点击切换', 'click to toggle')}"
         onclick={() => (enabledSources[src.id] = !enabledSources[src.id])}
       >
         {src.label}
@@ -599,25 +613,25 @@
     <input
       type="text"
       bind:value={filterText}
-      placeholder="搜索 cluster（输入汉字/词过滤）"
+      placeholder={t('搜索 cluster（输入汉字/词过滤）', 'Filter clusters (type characters/words)')}
       class="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
     />
   </div>
 
   <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-    找到 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{filteredClusters.length}</span> 组
+    {t('找到', 'Found')} <span class="font-semibold text-zinc-900 dark:text-zinc-100">{filteredClusters.length}</span> {t('组', 'clusters')}
     {#if filterText.trim()}
-      <span class="text-zinc-400">（含「{filterText.trim()}」）</span>
+      <span class="text-zinc-400">{t(`（含「${filterText.trim()}」）`, `(containing "${filterText.trim()}")`)}</span>
       {#if filteredClusters.length === 0 && usingPrecomputed}
         <button
           class="ml-2 rounded border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/30 px-2 py-0.5 text-xs text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50"
           onclick={() => { doRuntimeMining(); }}
         >
-          加载完整词库搜索 →
+          {t('加载完整词库搜索 →', 'Search full corpus →')}
         </button>
       {/if}
     {:else if filteredClusters.length > visibleCount}
-      <span class="text-zinc-400">（向下滚动加载更多）</span>
+      <span class="text-zinc-400">{t('（向下滚动加载更多）', '(scroll to load more)')}</span>
     {/if}
   </p>
 
@@ -628,14 +642,17 @@
         class="h-8 w-8 rounded-full border-[3px] border-zinc-200 dark:border-zinc-700 border-t-zinc-600 dark:border-t-zinc-300"
         style="animation: spin 0.7s linear infinite"
       ></div>
-      <p class="mt-3 text-sm">正在计算押韵组合…</p>
+      <p class="mt-3 text-sm">{t('正在计算押韵组合…', 'Mining rhyme clusters…')}</p>
     </div>
   {:else if filteredClusters.length === 0}
     <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center text-sm text-zinc-500">
       {#if lens === 'saved'}
-        还没有收藏的 cluster —— 去其它透镜逛一逛，看到喜欢的点 <span class="mx-1 align-middle">♡</span> 收藏它。
+        {t(
+          '还没有收藏的 cluster —— 去看看别的页面，遇到喜欢的点 ♡ 收藏。',
+          'No saved clusters yet — browse and click ♡ on any cluster to save it here.'
+        )}
       {:else}
-        当前条件下没有 cluster — 试试调低"最少成员"或"押韵深度"。
+        {t('当前条件下没有 cluster — 试试调低"最少成员"或"押韵深度"。', 'No clusters match the current filters — try lowering "Min members" or "Rhyme depth".')}
       {/if}
     </div>
   {:else}
@@ -656,9 +673,9 @@
                 {/each}
               </div>
               <p class="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-zinc-500">
-                <span>{cluster.patternLength} 押</span>
+                <span>{cluster.patternLength} {t('押', '-rhyme')}</span>
                 <span>·</span>
-                <span>{cluster.members.length} 成员{deduped.collapsed > 0 ? ` (折叠 ${deduped.collapsed})` : ''}</span>
+                <span>{cluster.members.length} {t('成员', 'members')}{deduped.collapsed > 0 ? t(` (折叠 ${deduped.collapsed})`, ` (${deduped.collapsed} collapsed)`) : ''}</span>
                 <span>·</span>
                 <span class="text-amber-500">{stars(cluster.cleverness)}</span>
                 <span class="font-mono">{cluster.cleverness.toFixed(2)}</span>
@@ -677,15 +694,15 @@
                 )
                   ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300'
                   : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-                title={favorites.has(cluster.id) ? '取消收藏' : '收藏这个 cluster'}
+                title={favorites.has(cluster.id) ? t('取消收藏', 'Unsave') : t('收藏这个 cluster', 'Save this cluster')}
                 aria-pressed={favorites.has(cluster.id)}
                 onclick={() => favorites.toggle(cluster.id)}
               >
-                {favorites.has(cluster.id) ? '❤️ 已收藏' : '♡ 收藏'}
+                {favorites.has(cluster.id) ? t('❤️ 已收藏', '❤️ Saved') : t('♡ 收藏', '♡ Save')}
               </button>
               <button
                 class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                title="复制成员列表"
+                title={t('复制成员列表', 'Copy all members')}
                 onclick={() =>
                   copyText(
                     cluster.members
@@ -693,7 +710,7 @@
                       .join(' / ')
                   )}
               >
-                复制
+                {t('复制', 'Copy')}
               </button>
             </div>
           </header>
@@ -705,13 +722,25 @@
               {@const matchStart = phrase.length - cluster.patternLength - m.tailOffset}
               {@const matchEnd = phrase.length - m.tailOffset}
               {@const badge = sourceBadge(phrase.source)}
-              <li class="relative rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2 pt-4">
+              {@const isCopied = copiedPhraseId === m.phraseId}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <li
+                class="group relative cursor-pointer rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2 pt-4 transition hover:border-sky-300 hover:bg-sky-50/50 dark:hover:border-sky-700 dark:hover:bg-sky-950/20"
+                title={t('点击复制', 'Click to copy')}
+                onclick={() => copyPhrase(m.phraseId, phrase.text)}
+              >
                 <span
                   class="absolute right-1 top-1 rounded px-1 py-0.5 font-mono text-[9px] leading-none {badge.cls}"
-                  title="来源：{phrase.source}"
+                  title="{t('来源', 'Source')}：{phrase.source}"
                 >
                   {badge.label}
                 </span>
+                {#if isCopied}
+                  <span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-emerald-500/90 text-xs font-semibold text-white">
+                    ✓ {t('已复制', 'Copied')}
+                  </span>
+                {/if}
                 <div class="flex items-end gap-[3px]">
                   {#each chars as ch, i (i)}
                     {@const inMatch = i >= matchStart && i < matchEnd}
@@ -755,7 +784,10 @@
             {/each}
             {#if deduped.collapsed > 0}
               <li class="flex items-center px-2 py-1 text-xs italic text-zinc-400 dark:text-zinc-500">
-                + {deduped.collapsed} 条同根模板已折叠（首词+词性相同的变体）
+                {t(
+                  `+ ${deduped.collapsed} 条同根模板已折叠（首词+词性相同的变体）`,
+                  `+ ${deduped.collapsed} near-duplicate template${deduped.collapsed === 1 ? '' : 's'} collapsed`
+                )}
               </li>
             {/if}
           </ul>
@@ -772,11 +804,11 @@
             class="h-5 w-5 rounded-full border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-500 dark:border-t-zinc-400"
             style="animation: spin 0.7s linear infinite"
           ></div>
-          <span class="ml-2 text-xs">加载更多（{visibleCount}/{filteredClusters.length}）</span>
+          <span class="ml-2 text-xs">{t('加载更多', 'Loading')}（{visibleCount}/{filteredClusters.length}）</span>
         </div>
       {:else if filteredClusters.length > PAGE_SIZE}
         <p class="py-6 text-center text-xs text-zinc-400">
-          全部 {filteredClusters.length} 组已显示
+          {t(`全部 ${filteredClusters.length} 组已显示`, `Showing all ${filteredClusters.length} clusters`)}
         </p>
       {/if}
     </div>
@@ -784,11 +816,11 @@
 
   <footer class="mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
-      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">主页</a>
+      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">{t('主页', 'Home')}</a>
       ·
-      <a href="{base}/search" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">查找押韵</a>
+      <a href="{base}/search" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">{t('查找押韵', 'Search')}</a>
       ·
-      <a href="{base}/analyze" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">反向分析</a>
+      <a href="{base}/analyze" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">{t('歌词分析', 'Analyze')}</a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
+  import { t } from '$lib/stores/lang.svelte';
 
   // Homepage loads ONLY manifest.json (~2KB) for source counts.
   // NO lexicon download (which is 280MB across 42 files).
@@ -76,77 +77,89 @@
   const SOURCES: Array<{
     id: string;
     label: string;
+    labelEn: string;
     desc: string;
+    descEn: string;
     color: string;
     license: string;
   }> = [
     {
       id: 'xinhua-idiom',
-      label: '成语',
+      label: '成语', labelEn: 'Idioms',
       desc: '新华成语词典 — 四字经典，千年积淀',
+      descEn: 'Xinhua Idiom Dictionary — 4-char classics refined over a millennium',
       color: 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30',
       license: 'MIT'
     },
     {
       id: 'opensubtitles-zh',
-      label: '口语',
+      label: '口语', labelEn: 'Colloquial',
       desc: 'OpenSubtitles 电影字幕 — 1600万行对白中挖出的现代口语',
+      descEn: 'Modern spoken Chinese mined from 16M lines of OpenSubtitles dialogue',
       color: 'border-cyan-300 bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/30',
       license: 'CC-BY-ND'
     },
     {
       id: 'lyrics-hiphop',
-      label: '说唱歌词',
+      label: '说唱歌词', labelEn: 'Hip-Hop Lyrics',
       desc: '70+ 位中文说唱歌手的歌词 — 最高创意密度的押韵素材',
+      descEn: 'Lyrics from 70+ Chinese rappers — the densest rhyme-craft in the corpus',
       color: 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30',
       license: 'MIT'
     },
     {
       id: 'lyrics-pop',
-      label: '流行歌词',
+      label: '流行歌词', labelEn: 'Pop Lyrics',
       desc: '500+ 歌手、5万首歌 — 流行/摇滚/民谣/R&B',
+      descEn: '500+ artists, 50k songs — Pop / Rock / Folk / R&B',
       color: 'border-pink-300 bg-pink-50 dark:border-pink-800 dark:bg-pink-950/30',
       license: 'MIT'
     },
     {
       id: 'xinhua-xiehouyu',
-      label: '歇后语',
+      label: '歇后语', labelEn: 'Xiehouyu',
       desc: '新华歇后语答案 — 民间智慧，口语化意象',
+      descEn: 'Two-part folk sayings — vernacular wit and vivid imagery',
       color: 'border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/30',
       license: 'MIT'
     },
     {
       id: 'chinese-poetry/tang',
-      label: '唐诗',
+      label: '唐诗', labelEn: 'Tang Poetry',
       desc: '唐诗三百首 — 古典韵律的源头',
+      descEn: '300 Tang Dynasty Poems — the wellspring of classical Chinese prosody',
       color: 'border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/30',
       license: 'MIT'
     },
     {
       id: 'chinese-poetry/song',
-      label: '宋词',
+      label: '宋词', labelEn: 'Song Lyrics',
       desc: '宋词三百首 — 婉约与豪放',
+      descEn: '300 Song Dynasty Ci — graceful and bold',
       color: 'border-indigo-300 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/30',
       license: 'MIT'
     },
     {
       id: 'moegirl-acg',
-      label: 'ACG · 二次元',
+      label: 'ACG · 二次元', labelEn: 'ACG · Otaku',
       desc: '萌娘百科 ACG 用语、网络流行语、弹幕用语、萌属性',
+      descEn: 'Moegirlpedia — anime/game terms, internet slang, danmaku vocabulary',
       color: 'border-fuchsia-300 bg-fuchsia-50 dark:border-fuchsia-800 dark:bg-fuchsia-950/30',
       license: 'CC-BY-NC-SA'
     },
     {
       id: 'wiktionary-slang',
-      label: '网络用语',
+      label: '网络用语', labelEn: 'Net Slang',
       desc: '维基词典收录的汉语网络流行语',
+      descEn: 'Chinese internet slang curated on Wiktionary',
       color: 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30',
       license: 'CC-BY-SA'
     },
     {
       id: 'cedict',
-      label: '词典',
+      label: '词典', labelEn: 'Dictionary',
       desc: 'CC-CEDICT 开源中英词典 — 8万+ 基础2-3字常用词',
+      descEn: 'CC-CEDICT open Chinese-English dictionary — 80k+ basic 2-3 char words',
       color: 'border-lime-300 bg-lime-50 dark:border-lime-800 dark:bg-lime-950/30',
       license: 'CC-BY-SA'
     },
@@ -154,17 +167,20 @@
 </script>
 
 <svelte:head>
-  <title>世界最强押韵网站</title>
+  <title>{t('世界最强押韵网站', 'World-Class Chinese Rhyme Finder')}</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <!-- 主标题 -->
   <header class="mb-10 text-center">
     <h1 class="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
-      世界最强押韵网站
+      {t('世界最强押韵网站', 'World-Class Chinese Rhyme Finder')}
     </h1>
     <p class="mt-4 text-lg text-zinc-600 dark:text-zinc-400">
-      收录 {totalPhrases.toLocaleString()} 条中文短语 · {SOURCES.length} 个语料库 · 纯算法，不用 AI
+      {t(
+        `收录 ${totalPhrases.toLocaleString()} 条中文短语 · ${SOURCES.length} 个语料库 · 纯算法，不用 AI`,
+        `${totalPhrases.toLocaleString()} Chinese phrases · ${SOURCES.length} corpora · pure algorithms, no AI`
+      )}
     </p>
   </header>
 
@@ -175,31 +191,31 @@
       class="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center shadow transition hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600"
     >
       <p class="text-3xl">🔥</p>
-      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">押韵灵感</h2>
-      <p class="mt-1 text-sm text-zinc-500">浏览算法自动发现的押韵组合，找到你想不到的妙语搭配</p>
+      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('押韵灵感', 'Discover')}</h2>
+      <p class="mt-1 text-sm text-zinc-500">{t('浏览算法自动发现的押韵组合，找到你想不到的妙语搭配', 'Browse algorithm-mined rhyme combos you never would have thought of')}</p>
     </a>
     <a
       href="{base}/search/"
       class="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center shadow transition hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600"
     >
       <p class="text-3xl">🔍</p>
-      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">找押韵</h2>
-      <p class="mt-1 text-sm text-zinc-500">输入一个词，从语料库里找出所有跟它押韵的候选词</p>
+      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('找押韵', 'Search')}</h2>
+      <p class="mt-1 text-sm text-zinc-500">{t('输入一个词，从语料库里找出所有跟它押韵的候选词', 'Enter a phrase, get every rhyme candidate from the corpus')}</p>
     </a>
     <a
       href="{base}/analyze/"
       class="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center shadow transition hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600"
     >
       <p class="text-3xl">📝</p>
-      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">歌词分析</h2>
-      <p class="mt-1 text-sm text-zinc-500">粘贴歌词，自动标注押韵位置、类型和深度</p>
+      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('歌词分析', 'Analyze')}</h2>
+      <p class="mt-1 text-sm text-zinc-500">{t('粘贴歌词，自动标注押韵位置、类型和深度', 'Paste lyrics to see rhyme positions, types, and depth')}</p>
     </a>
   </section>
 
   <!-- Data sources dashboard -->
   <section class="mb-10">
     <h2 class="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-      语料数据源
+      {t('语料数据源', 'Data Sources')}
     </h2>
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {#each SOURCES as src (src.id)}
@@ -210,7 +226,7 @@
           disabled={count === 0}
         >
           <div class="flex items-baseline justify-between">
-            <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">{src.label}</h3>
+            <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t(src.label, src.labelEn)}</h3>
             <span class="font-mono text-lg font-bold text-zinc-900 dark:text-zinc-100">
               {#if lexiconLoading}
                 <span class="inline-block h-5 w-12 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700"></span>
@@ -219,28 +235,28 @@
               {/if}
             </span>
           </div>
-          <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{src.desc}</p>
+          <p class="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{t(src.desc, src.descEn)}</p>
           <div class="mt-1 flex items-center justify-between">
             <span class="font-mono text-[10px] text-zinc-400">{src.license}</span>
             {#if count > 0}
-              <span class="text-[10px] text-zinc-400">点击查看 →</span>
+              <span class="text-[10px] text-zinc-400">{t('点击查看 →', 'View →')}</span>
             {/if}
           </div>
         </button>
       {/each}
     </div>
     <p class="mt-3 text-right text-sm text-zinc-500">
-      合计 <span class="font-bold text-zinc-900 dark:text-zinc-100">{totalPhrases.toLocaleString()}</span> 条
+      {t('合计', 'Total')} <span class="font-bold text-zinc-900 dark:text-zinc-100">{totalPhrases.toLocaleString()}</span> {t('条', 'phrases')}
     </p>
   </section>
 
   <!-- Star prompt -->
   <section class="mb-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-6 text-center">
     <p class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-      觉得好用？给个 ⭐ 支持一下！
+      {t('觉得好用？给个 ⭐ 支持一下！', 'Finding this useful? Drop a ⭐!')}
     </p>
     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-      开源项目，你的 Star 是最大的鼓励
+      {t('开源项目，你的 Star 是最大的鼓励', 'Open source — your star is the best encouragement')}
     </p>
     <a
       href="https://github.com/QianyangPeng/chinese-rhyme-finder"
@@ -255,10 +271,10 @@
   <!-- Issue / feedback prompt -->
   <section class="mb-10 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 p-6 text-center">
     <p class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-      发现 bug？有好点子？欢迎提 issue
+      {t('发现 bug？有好点子？欢迎提 issue', 'Found a bug? Have an idea? File an issue!')}
     </p>
     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-      押韵不对、数据错漏、想加功能，都可以在 GitHub 告诉我
+      {t('押韵不对、数据错漏、想加功能，都可以在 GitHub 告诉我', 'Wrong rhymes, data errors, feature requests — tell me on GitHub')}
     </p>
     <a
       href="https://github.com/QianyangPeng/chinese-rhyme-finder/issues/new"
@@ -266,21 +282,21 @@
       rel="noopener"
       class="mt-3 inline-flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400"
     >
-      提一个 Issue →
+      {t('提一个 Issue →', 'File an Issue →')}
     </a>
   </section>
 
   <!-- Footer -->
   <footer class="border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
-      开源项目 ·
+      {t('开源项目', 'Open source')} ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
         class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:hover:text-zinc-100"
       >
         GitHub
       </a>
-      · 所有语料均来自开源数据集 · 纯算法，不使用 AI 生成
+      · {t('所有语料均来自开源数据集 · 纯算法，不使用 AI 生成', 'All data from open-source corpora · pure algorithms, no AI generation')}
     </p>
   </footer>
 </div>
@@ -299,10 +315,13 @@
       <div class="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-4">
         <div>
           <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-            {srcMeta?.label ?? modalSourceId}
+            {srcMeta ? t(srcMeta.label, srcMeta.labelEn) : modalSourceId}
           </h3>
           <p class="text-xs text-zinc-500">
-            {modalPhrases.length.toLocaleString()} 条 · 第 {modalPage + 1}/{modalTotalPages} 页
+            {t(
+              `${modalPhrases.length.toLocaleString()} 条 · 第 ${modalPage + 1}/${modalTotalPages} 页`,
+              `${modalPhrases.length.toLocaleString()} phrases · Page ${modalPage + 1}/${modalTotalPages}`
+            )}
           </p>
         </div>
         <button
@@ -318,17 +337,17 @@
         {#if modalLoading}
           <div class="flex items-center justify-center py-12 text-zinc-400">
             <div class="h-6 w-6 rounded-full border-2 border-zinc-200 dark:border-zinc-700 border-t-zinc-500" style="animation: spin 0.7s linear infinite"></div>
-            <span class="ml-2 text-sm">加载数据…</span>
+            <span class="ml-2 text-sm">{t('加载数据…', 'Loading data…')}</span>
           </div>
         {:else}
         <table class="w-full text-sm">
           <thead class="sticky top-0 z-10 bg-white dark:bg-zinc-900 [&_th]:border-b [&_th]:border-zinc-200 dark:[&_th]:border-zinc-700">
             <tr class="border-b border-zinc-200 dark:border-zinc-800 text-left text-xs text-zinc-500">
               <th class="py-2 pr-3 w-8">#</th>
-              <th class="py-2 pr-3">短语</th>
-              <th class="py-2 pr-3">拼音</th>
-              <th class="py-2 pr-3">词性</th>
-              <th class="py-2 text-right">质量</th>
+              <th class="py-2 pr-3">{t('短语', 'Phrase')}</th>
+              <th class="py-2 pr-3">{t('拼音', 'Pinyin')}</th>
+              <th class="py-2 pr-3">{t('词性', 'POS')}</th>
+              <th class="py-2 text-right">{t('质量', 'Quality')}</th>
             </tr>
           </thead>
           <tbody>
@@ -363,7 +382,7 @@
           disabled={modalPage === 0}
           onclick={() => (modalPage = Math.max(0, modalPage - 1))}
         >
-          上一页
+          {t('上一页', 'Prev')}
         </button>
         <span class="text-xs text-zinc-500">
           {modalPage * MODAL_PAGE_SIZE + 1}–{Math.min((modalPage + 1) * MODAL_PAGE_SIZE, modalPhrases.length)} / {modalPhrases.length.toLocaleString()}
@@ -373,7 +392,7 @@
           disabled={modalPage >= modalTotalPages - 1}
           onclick={() => (modalPage = Math.min(modalTotalPages - 1, modalPage + 1))}
         >
-          下一页
+          {t('下一页', 'Next')}
         </button>
       </div>
     </div>

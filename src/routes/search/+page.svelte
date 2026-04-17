@@ -12,6 +12,7 @@
   type SearchMode = 'full' | 'tail';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
+  import { t } from '$lib/stores/lang.svelte';
 
   // Defaults; URL-based overrides applied client-side in onMount so
   // prerender doesn't choke on searchParams access.
@@ -120,20 +121,23 @@
 </script>
 
 <svelte:head>
-  <title>找押韵 · 世界最强押韵</title>
+  <title>{t('找押韵 · 世界最强押韵', 'Search · Rhyme Finder')}</title>
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
   <header class="mb-6">
-    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">找押韵</h1>
+    <h1 class="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{t('找押韵', 'Search')}</h1>
     <p class="mt-2 text-base text-zinc-600 dark:text-zinc-400">
-      输入一个词组，从内置词库中查找押韵的候选（包括尾部匹配的长词）— 按"严格 → 宽松"分层展示。
+      {t(
+        '输入一个词组，从内置词库中查找押韵的候选（包括尾部匹配的长词）— 按"严格 → 宽松"分层展示。',
+        'Enter a phrase and the corpus will return rhyme candidates (including tail-matched longer phrases), grouped from strict to loose.'
+      )}
     </p>
   </header>
 
   <!-- Preset chips -->
   <div class="mb-3 flex flex-wrap gap-2 text-xs">
-    <span class="text-zinc-500">试试：</span>
+    <span class="text-zinc-500">{t('试试：', 'Try:')}</span>
     {#each PRESETS as preset (preset)}
       <button
         class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:bg-zinc-900"
@@ -146,34 +150,34 @@
 
   <!-- Tone mode + tail-match -->
   <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
-    <span class="text-zinc-500">押韵严格度：</span>
+    <span class="text-zinc-500">{t('押韵严格度：', 'Strictness:')}</span>
     <button
       class="rounded border px-2.5 py-1 text-xs transition {toneMode === 'none'
         ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
         : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-      title="仅要求韵母一致（如 iang = iang）"
+      title={t('仅要求韵母一致（如 iang = iang）', 'Only rhyme finals must match (e.g. iang = iang)')}
       onclick={() => (toneMode = 'none')}
     >
-      韵母一致
+      {t('韵母一致', 'Rhyme match')}
     </button>
     <button
       class="rounded border px-2.5 py-1 text-xs transition {toneMode === 'exact'
         ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
         : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-      title="韵母+声调都必须一致（jiāng 和 jiǎng 不算押韵）"
+      title={t('韵母+声调都必须一致（jiāng 和 jiǎng 不算押韵）', 'Both rhyme and tone must match (jiāng ≠ jiǎng)')}
       onclick={() => (toneMode = 'exact')}
     >
-      韵母+声调
+      {t('韵母+声调', 'Rhyme + Tone')}
     </button>
 
-    <span class="ml-4 text-zinc-500">末位：</span>
+    <span class="ml-4 text-zinc-500">{t('末位：', 'Last syllable:')}</span>
     <label class="inline-flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300">
       <input
         type="checkbox"
         bind:checked={requireTailMatch}
         class="accent-zinc-900 dark:accent-zinc-100"
       />
-      <span title="末位（最后一个字）必须押韵，不押就不是押韵">必须押韵</span>
+      <span title={t('末位（最后一个字）必须押韵，不押就不是押韵', 'The last syllable must rhyme — otherwise it is not a rhyme')}>{t('必须押韵', 'must rhyme')}</span>
     </label>
   </div>
 
@@ -182,19 +186,19 @@
     <input
       type="text"
       bind:value={query}
-      placeholder="例如：降维打击"
+      placeholder={t('例如：降维打击', 'e.g. 降维打击')}
       class="block w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 font-mono text-base shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
     />
     <button
       type="button"
       onclick={shareLink}
       class="shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
-      title="复制当前搜索的分享链接"
+      title={t('复制当前搜索的分享链接', 'Copy share link for this search')}
     >
       {#if copiedAt && Date.now() - copiedAt < 2000}
-        ✓ 已复制
+        ✓ {t('已复制', 'Copied')}
       {:else}
-        🔗 分享
+        🔗 {t('分享', 'Share')}
       {/if}
     </button>
   </div>
@@ -202,7 +206,7 @@
   <!-- Query analysis breadcrumb -->
   {#if querySyllables.length > 0}
     <div class="mt-3 flex flex-wrap items-center gap-1.5 font-mono text-xs">
-      <span class="text-zinc-500">韵母模式：</span>
+      <span class="text-zinc-500">{t('韵母模式：', 'Rhyme pattern:')}</span>
       {#each querySyllables as s, i (i)}
         <span
           class="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300"
@@ -213,19 +217,18 @@
         </span>
       {/each}
       <span class="text-zinc-400">·</span>
-      <span class="text-zinc-500">{queryFinals.filter(Boolean).join(' / ') || '未识别'}</span>
+      <span class="text-zinc-500">{queryFinals.filter(Boolean).join(' / ') || t('未识别', 'Unrecognized')}</span>
     </div>
   {/if}
 
   <!-- Lexicon badge -->
   <p class="mt-3 text-xs text-zinc-500">
-    词库：内置 <span class="font-mono">{lexicon.phrases.length}</span> 条 ·
+    {t('词库：内置', 'Corpus:')} <span class="font-mono">{lexicon.phrases.length}</span> {t('条', 'phrases')} ·
     {#if mode === 'full'}
-      匹配等长及尾部押韵的长词
+      {t('匹配等长及尾部押韵的长词', 'matches same-length phrases and tail rhymes in longer ones')}
     {:else}
-      尾押模式不限长度
+      {t('尾押模式不限长度', 'tail-rhyme mode: any phrase length')}
     {/if}
-    · 一旦 P1.4 数据管道完成将自动扩到 50k+
   </p>
 
   <!-- Results -->
@@ -233,20 +236,22 @@
     {#if totalHits === 0}
       <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-6 text-center">
         {#if querySyllables.length === 0}
-          <p class="text-sm text-zinc-500">输入一个中文词组试试。</p>
+          <p class="text-sm text-zinc-500">{t('输入一个中文词组试试。', 'Try entering a Chinese phrase.')}</p>
         {:else}
           <p class="text-sm text-zinc-700 dark:text-zinc-300">
-            没有找到押韵候选 — 词库还小，等正式数据进来会好很多。
+            {t('没有找到押韵候选 — 试试换个词，或放宽严格度。', 'No rhyme candidates — try a different phrase or loosen strictness.')}
           </p>
           <p class="mt-1 text-xs text-zinc-500">
-            提示：试试宽松邻韵 scheme，或切到尾押模式看更多候选。
+            {t('提示：试试宽松邻韵 scheme，或切到尾押模式看更多候选。', 'Tip: try a looser rhyme scheme, or switch to tail-rhyme mode for more candidates.')}
           </p>
         {/if}
       </div>
     {:else if mode === 'full' && fullResult}
       <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        共 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{fullResult.totalHits}</span>
-        条候选，按宽松级别分层（Level 0 = 全严格匹配；Level k = 第 k 位放宽）：
+        {t(
+          `共 ${fullResult.totalHits} 条候选，按宽松级别分层（Level 0 = 全严格匹配；Level k = 第 k 位放宽）：`,
+          `${fullResult.totalHits} candidates, grouped by loosening level (Level 0 = all positions match; Level k = k positions relaxed):`
+        )}
       </p>
 
       <div class="space-y-4">
@@ -257,14 +262,14 @@
                 Level {bucket.level}
                 <span class="ml-2 font-normal text-zinc-500">
                   {#if bucket.level === 0}
-                    全押 · 每个位置都匹配
+                    {t('全押 · 每个位置都匹配', 'Full rhyme · every position matches')}
                   {:else}
-                    {bucket.level} 位放宽
+                    {t(`${bucket.level} 位放宽`, `${bucket.level} position${bucket.level === 1 ? '' : 's'} relaxed`)}
                   {/if}
                 </span>
               </p>
               <span class="font-mono text-xs text-zinc-500">
-                {bucket.hits.length} 条
+                {bucket.hits.length} {t('条', 'hits')}
               </span>
             </div>
 
@@ -276,7 +281,7 @@
                       {hit.phrase.text}
                     </span>
                     <span class="font-mono text-xs text-zinc-400">
-                      {hit.match.matchedPositions.length}/{hit.match.comparedLength} 押
+                      {hit.match.matchedPositions.length}/{hit.match.comparedLength} {t('押', 'rhymed')}
                     </span>
                   </div>
                   <div class="flex flex-wrap items-center gap-1 font-mono text-xs">
@@ -303,8 +308,10 @@
       </div>
     {:else if mode === 'tail' && tailResult}
       <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-        共 <span class="font-semibold text-zinc-900 dark:text-zinc-100">{tailResult.totalHits}</span>
-        条候选，按尾押深度排序（K 越大，末尾押得越深）：
+        {t(
+          `共 ${tailResult.totalHits} 条候选，按尾押深度排序（K 越大，末尾押得越深）：`,
+          `${tailResult.totalHits} candidates, sorted by tail-rhyme depth (larger K = deeper tail match):`
+        )}
       </p>
 
       <div class="space-y-4">
@@ -312,11 +319,11 @@
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
               <p class="font-semibold text-zinc-800 dark:text-zinc-200">
-                {bucket.tailK} 押
-                <span class="ml-2 font-normal text-zinc-500">末尾 {bucket.tailK} 个音节完全押</span>
+                {bucket.tailK} {t('押', '-rhyme')}
+                <span class="ml-2 font-normal text-zinc-500">{t(`末尾 ${bucket.tailK} 个音节完全押`, `last ${bucket.tailK} syllables all rhyme`)}</span>
               </p>
               <span class="font-mono text-xs text-zinc-500">
-                {bucket.hits.length} 条
+                {bucket.hits.length} {t('条', 'hits')}
               </span>
             </div>
 
@@ -328,7 +335,7 @@
                       {hit.phrase.text}
                     </span>
                     <span class="font-mono text-xs text-zinc-400">
-                      {hit.phrase.length} 音节
+                      {hit.phrase.length} {t('音节', 'syllables')}
                     </span>
                   </div>
                   <div class="flex flex-wrap items-center gap-1 font-mono text-xs">
@@ -359,9 +366,9 @@
 
   <footer class="mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-6 text-sm text-zinc-500">
     <p>
-      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">主页</a>
+      <a href="{base}/" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">{t('主页', 'Home')}</a>
       ·
-      <a href="{base}/analyze" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">反向分析</a>
+      <a href="{base}/analyze" class="text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">{t('歌词分析', 'Analyze')}</a>
       ·
       <a
         href="https://github.com/QianyangPeng/chinese-rhyme-finder"
