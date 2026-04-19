@@ -31,9 +31,9 @@
   <div class="mx-auto flex max-w-4xl items-center justify-between gap-3 px-6 py-3">
     <a
       href="{base}/"
-      class="font-mono text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+      class="text-sm font-bold tracking-tight text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
     >
-      {t('世界最强押韵', 'Rhyme Finder')}
+      {t('押韵集', 'Chinese Rhymes')}
     </a>
     <ul class="flex flex-wrap items-center gap-1 text-xs">
       {#each LINKS as link (link.href)}

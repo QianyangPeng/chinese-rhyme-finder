@@ -474,7 +474,7 @@
 </script>
 
 <svelte:head>
-  <title>{t('押韵灵感 · 算法挖掘的中文押韵组合 · 世界最强押韵', 'Discover · Algorithm-mined Chinese rhyme clusters · Rhyme Finder')}</title>
+  <title>{t('押韵灵感 · 算法挖掘的中文押韵组合 · 押韵集', 'Discover · Algorithm-mined Chinese rhyme clusters · Chinese Rhymes')}</title>
   <meta
     name="description"
     content={t(

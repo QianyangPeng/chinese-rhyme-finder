@@ -212,7 +212,7 @@
 </script>
 
 <svelte:head>
-  <title>{t('歌词分析 · 押韵深度可视化 · 世界最强押韵', 'Lyrics Analyze · Rhyme depth visualizer · Rhyme Finder')}</title>
+  <title>{t('歌词分析 · 押韵深度可视化 · 押韵集', 'Lyrics Analyze · Rhyme depth visualizer · Chinese Rhymes')}</title>
   <meta
     name="description"
     content={t(

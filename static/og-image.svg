@@ -19,11 +19,11 @@
   </g>
 
   <!-- Title -->
-  <text x="280" y="170" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="76" font-weight="900" fill="#fafafa">
-    世界最强中文押韵
+  <text x="280" y="170" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="100" font-weight="900" fill="#fafafa">
+    押韵集
   </text>
-  <text x="280" y="220" font-family="-apple-system, sans-serif" font-size="32" font-weight="500" fill="#a1a1aa">
-    Chinese Rhyme Finder
+  <text x="280" y="220" font-family="-apple-system, sans-serif" font-size="34" font-weight="500" fill="#a1a1aa" letter-spacing="2">
+    Chinese Rhymes
   </text>
 
   <!-- Stats row -->

@@ -167,12 +167,12 @@
 </script>
 
 <svelte:head>
-  <title>{t('世界最强中文押韵网站 · 在线押韵词典', 'Chinese Rhyme Finder · Free online rhyme dictionary')}</title>
+  <title>{t('押韵集 · Chinese Rhymes — 在线中文押韵词典', 'Chinese Rhymes 押韵集 — Free online Chinese rhyme dictionary')}</title>
   <meta
     name="description"
     content={t(
-      `收录 ${totalPhrases.toLocaleString()} 条中文短语，10 个开源语料库（成语、说唱、流行歌词、电影字幕、CC-CEDICT 等）。免费的中文押韵网站，支持双押到八押多音节押韵查询，写歌词、说唱、对联、诗词都好用。`,
-      `${totalPhrases.toLocaleString()} Chinese phrases across 10 open-source corpora — idioms, hip-hop & pop lyrics, movie subtitles, CC-CEDICT, and more. Free rhyme finder for Chinese with 2- to 8-syllable multi-rhyme search. For songwriters, rappers, and poets.`
+      `押韵集（Chinese Rhymes）— 收录 ${totalPhrases.toLocaleString()} 条中文短语，10 个开源语料库（成语、说唱、流行歌词、电影字幕、CC-CEDICT 等）。免费的中文押韵词典，支持双押到八押多音节押韵查询，写歌词、说唱、对联、诗词都好用。`,
+      `Chinese Rhymes — ${totalPhrases.toLocaleString()} Chinese phrases across 10 open-source corpora (idioms, hip-hop & pop lyrics, movie subtitles, CC-CEDICT, more). Free Mandarin rhyme dictionary with 2- to 8-syllable multi-rhyme search. For songwriters, rappers, and poets.`
     )}
   />
   <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/" />
@@ -181,9 +181,12 @@
 <div class="mx-auto max-w-4xl px-6 py-12">
   <!-- 主标题 -->
   <header class="mb-10 text-center">
-    <h1 class="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
-      {t('世界最强押韵网站', 'World-Class Chinese Rhyme Finder')}
+    <h1 class="text-6xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
+      {t('押韵集', 'Chinese Rhymes')}
     </h1>
+    <p class="mt-3 font-mono text-xs uppercase tracking-[0.3em] text-zinc-400">
+      {t('Chinese Rhymes', '押韵集')}
+    </p>
     <p class="mt-4 text-lg text-zinc-600 dark:text-zinc-400">
       {t(
         `收录 ${totalPhrases.toLocaleString()} 条中文短语 · ${SOURCES.length} 个语料库`,

@@ -1,7 +1,7 @@
-# 世界最强押韵网站 · World-Class Chinese Rhyme Finder
+# 押韵集 · Chinese Rhymes
 
-> 收录 80 万条中文短语，10 个语料库，纯算法押韵发现引擎。
-> A pure-algorithm Chinese rhyme discovery engine — 800k+ phrases across 10 corpora.
+> 中文多音节押韵词典 — 80 万条短语，10 个开源语料库，算法挖掘双押到八押。
+> A Chinese multi-syllable rhyme dictionary — 800k+ phrases across 10 open corpora, algorithm-mined rhymes from 2- to 8-syllable depth.
 
 **在线使用 · Try it online**：[qianyangpeng.github.io/chinese-rhyme-finder](https://qianyangpeng.github.io/chinese-rhyme-finder/)
 

@@ -1,7 +1,7 @@
 {
-  "name": "世界最强中文押韵网站",
-  "short_name": "押韵",
-  "description": "中文多音节押韵发现工具：80 万条短语 / 10 个开源语料库 / 双押到八押。",
+  "name": "押韵集 · Chinese Rhymes",
+  "short_name": "押韵集",
+  "description": "押韵集 (Chinese Rhymes) — 中文多音节押韵发现工具：80 万条短语 / 10 个开源语料库 / 双押到八押。",
   "lang": "zh-CN",
   "start_url": "/chinese-rhyme-finder/",
   "scope": "/chinese-rhyme-finder/",

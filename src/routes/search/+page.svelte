@@ -147,7 +147,7 @@
 </script>
 
 <svelte:head>
-  <title>{t('找押韵 · 中文押韵查询 · 世界最强押韵', 'Search Rhymes · Chinese Rhyme Finder')}</title>
+  <title>{t('找押韵 · 中文押韵查询 · 押韵集', 'Search Rhymes · Chinese Rhymes')}</title>
   <meta
     name="description"
     content={t(
