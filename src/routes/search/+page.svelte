@@ -92,7 +92,12 @@
           // Generous cap — same-length-first sort guarantees short
           // dictionary words still surface even when there are
           // thousands of long-phrase candidates at the same level.
-          maxPerBucket: 80,
+          // 1000 is a safety net against browser jank on very common
+          // patterns like "你好" (n+ao) where unbounded results can
+          // hit 50k+ DOM nodes; with the sort order what gets cut is
+          // the long-phrase tail of low-quality matches that nobody
+          // would scroll through anyway.
+          maxPerBucket: 1000,
           toneMode,
           targetTones: queryTones,
           requireTailMatch,
@@ -116,7 +121,7 @@
       ? searchByTail(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
           minTailK: 2,
-          maxPerBucket: 30,
+          maxPerBucket: 1000,
           toneMode,
           targetTones: queryTones
         })
