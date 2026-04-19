@@ -495,7 +495,7 @@
   <div class="mb-5 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-xs text-zinc-700 dark:text-zinc-300">
     {t('词库', 'Corpus')} <span class="font-semibold">{totalPhrasesInCorpus > 0 ? totalPhrasesInCorpus.toLocaleString() : t('加载中…', 'Loading…')}</span> {t('条', 'phrases')}
     {#if usingPrecomputed}
-      <span class="text-emerald-600 dark:text-emerald-400">{t('（预算数据，秒开）', '(pre-computed, instant)')}</span>
+      <!-- (no extra label) -->
     {:else if loadedSourceCount > 0}
       <span class="text-emerald-600 dark:text-emerald-400">
         {t(`（${loadedSourceCount} 个语料源已加载）`, `(${loadedSourceCount} source${loadedSourceCount === 1 ? '' : 's'} loaded)`)}

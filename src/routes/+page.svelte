@@ -178,8 +178,8 @@
     </h1>
     <p class="mt-4 text-lg text-zinc-600 dark:text-zinc-400">
       {t(
-        `收录 ${totalPhrases.toLocaleString()} 条中文短语 · ${SOURCES.length} 个语料库 · 纯算法，不用 AI`,
-        `${totalPhrases.toLocaleString()} Chinese phrases · ${SOURCES.length} corpora · pure algorithms, no AI`
+        `收录 ${totalPhrases.toLocaleString()} 条中文短语 · ${SOURCES.length} 个语料库`,
+        `${totalPhrases.toLocaleString()} Chinese phrases · ${SOURCES.length} corpora`
       )}
     </p>
   </header>
@@ -296,7 +296,7 @@
       >
         GitHub
       </a>
-      · {t('所有语料均来自开源数据集 · 纯算法，不使用 AI 生成', 'All data from open-source corpora · pure algorithms, no AI generation')}
+      · {t('所有语料均来自开源数据集', 'All data from open-source corpora')}
     </p>
   </footer>
 </div>
