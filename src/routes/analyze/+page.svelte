@@ -212,7 +212,15 @@
 </script>
 
 <svelte:head>
-  <title>{t('歌词分析 · 世界最强押韵', 'Analyze · Rhyme Finder')}</title>
+  <title>{t('歌词分析 · 押韵深度可视化 · 世界最强押韵', 'Lyrics Analyze · Rhyme depth visualizer · Rhyme Finder')}</title>
+  <meta
+    name="description"
+    content={t(
+      '把中文歌词或诗句粘贴进来，自动标注每行的押韵位置、类型（尾韵/头韵/句中韵/句内韵）和深度（双押/三押/四押…）。可视化展示行与行之间的押韵关系。',
+      'Paste Chinese lyrics or verse to auto-label every line with rhyme positions, types (tail / head / mid-line / internal), and depth (2- to 8-rhyme). Visualizes the rhyme relationships between lines.'
+    )}
+  />
+  <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/analyze/" />
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">

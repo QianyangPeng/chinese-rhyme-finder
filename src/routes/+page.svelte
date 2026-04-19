@@ -167,7 +167,15 @@
 </script>
 
 <svelte:head>
-  <title>{t('世界最强押韵网站', 'World-Class Chinese Rhyme Finder')}</title>
+  <title>{t('世界最强中文押韵网站 · 在线押韵词典', 'Chinese Rhyme Finder · Free online rhyme dictionary')}</title>
+  <meta
+    name="description"
+    content={t(
+      `收录 ${totalPhrases.toLocaleString()} 条中文短语，10 个开源语料库（成语、说唱、流行歌词、电影字幕、CC-CEDICT 等）。免费的中文押韵网站，支持双押到八押多音节押韵查询，写歌词、说唱、对联、诗词都好用。`,
+      `${totalPhrases.toLocaleString()} Chinese phrases across 10 open-source corpora — idioms, hip-hop & pop lyrics, movie subtitles, CC-CEDICT, and more. Free rhyme finder for Chinese with 2- to 8-syllable multi-rhyme search. For songwriters, rappers, and poets.`
+    )}
+  />
+  <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/" />
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">

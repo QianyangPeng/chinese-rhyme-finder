@@ -2,12 +2,77 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- ── Icons ────────────────────────────────────────────── -->
+    <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="%sveltekit.assets%/favicon.svg" />
+    <link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
+    <meta name="theme-color" content="#18181b" />
+
+    <!-- ── Default SEO (per-page <svelte:head> can override) ── -->
+    <title>世界最强中文押韵网站 · Chinese Rhyme Finder</title>
     <meta
       name="description"
-      content="中文多音节押韵发现工具 · 主动推送巧妙的押韵组合，启发创作"
+      content="世界最强中文押韵网站 — 80 万条短语，10 个开源语料库（成语、说唱歌词、流行歌词、电影字幕、CC-CEDICT 词典），算法挖掘双押到八押的押韵组合。免费在线，写歌词、说唱、对联、诗词都能用。"
     />
+    <meta
+      name="keywords"
+      content="押韵, 中文押韵, 押韵网站, 押韵词典, 押韵查询, 找押韵, 双押, 三押, 四押, rap 押韵, 说唱押韵, 写歌词, 多音节押韵, chinese rhyme, mandarin rhyme dictionary"
+    />
+    <meta name="author" content="Qianyang Peng" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/" />
+
+    <!-- ── Open Graph (Facebook, LinkedIn, WeChat preview) ── -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="世界最强押韵" />
+    <meta property="og:title" content="世界最强中文押韵网站 · Chinese Rhyme Finder" />
+    <meta
+      property="og:description"
+      content="80 万条短语，10 个开源语料库，算法挖掘双押到八押的押韵组合。免费在线押韵工具。"
+    />
+    <meta property="og:url" content="https://qianyangpeng.github.io/chinese-rhyme-finder/" />
+    <meta property="og:image" content="https://qianyangpeng.github.io/chinese-rhyme-finder/og-image.svg" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- ── Twitter Card ───────────────────────────────────── -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="世界最强中文押韵网站" />
+    <meta
+      name="twitter:description"
+      content="80 万条短语，10 个开源语料库，算法挖掘双押到八押的押韵组合。"
+    />
+    <meta name="twitter:image" content="https://qianyangpeng.github.io/chinese-rhyme-finder/og-image.svg" />
+
+    <!-- ── Structured data: WebApplication schema ───────────── -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "世界最强中文押韵网站",
+        "alternateName": "Chinese Rhyme Finder",
+        "url": "https://qianyangpeng.github.io/chinese-rhyme-finder/",
+        "description": "中文押韵发现工具：80 万条短语 / 10 个开源语料库 / 算法挖掘双押到八押的押韵组合。",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Any",
+        "inLanguage": ["zh-CN", "en"],
+        "isAccessibleForFree": true,
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Person",
+          "name": "Qianyang Peng",
+          "url": "https://github.com/QianyangPeng"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+
     <script>
       // Applied BEFORE hydration so the page doesn't flash light before
       // flipping to dark. Reads localStorage first, falls back to OS pref.

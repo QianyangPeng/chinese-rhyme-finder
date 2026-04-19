@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Block crawling the giant lexicon JSON files — search engines should
+# index pages, not the raw 30MB phrase blobs that drive the UI.
+Disallow: /chinese-rhyme-finder/data/
+
+Sitemap: https://qianyangpeng.github.io/chinese-rhyme-finder/sitemap.xml

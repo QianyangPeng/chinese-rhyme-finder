@@ -474,7 +474,15 @@
 </script>
 
 <svelte:head>
-  <title>{t('押韵灵感 · 世界最强押韵', 'Discover · Rhyme Finder')}</title>
+  <title>{t('押韵灵感 · 算法挖掘的中文押韵组合 · 世界最强押韵', 'Discover · Algorithm-mined Chinese rhyme clusters · Rhyme Finder')}</title>
+  <meta
+    name="description"
+    content={t(
+      '浏览 7000+ 算法自动发现的中文押韵 cluster，从双押到八押全覆盖，按巧妙度排序。每组里所有短语都能套到同一个韵脚 — 写歌词、写说唱、找灵感的最佳起点。',
+      'Browse 7,000+ algorithm-mined Chinese rhyme clusters from 2- to 8-syllable depth, sorted by cleverness. Every phrase in a group shares the same rhyme tail — perfect inspiration for lyrics, rap, and poetry.'
+    )}
+  />
+  <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/discover/" />
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0a09"/>
+      <stop offset="100%" stop-color="#1c1917"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="50%" stop-color="#f472b6"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Big "韵" mark, top-left -->
+  <g transform="translate(80, 80)">
+    <rect width="160" height="160" rx="32" fill="#fafafa"/>
+    <text x="80" y="124" text-anchor="middle" font-size="120" fill="#0c0a09" font-family="serif" font-weight="bold">韵</text>
+  </g>
+
+  <!-- Title -->
+  <text x="280" y="170" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="76" font-weight="900" fill="#fafafa">
+    世界最强中文押韵
+  </text>
+  <text x="280" y="220" font-family="-apple-system, sans-serif" font-size="32" font-weight="500" fill="#a1a1aa">
+    Chinese Rhyme Finder
+  </text>
+
+  <!-- Stats row -->
+  <g transform="translate(80, 340)">
+    <text x="0" y="0" font-family="-apple-system, 'PingFang SC', sans-serif" font-size="56" font-weight="800" fill="url(#accent)">
+      80 万 + 短语
+    </text>
+    <text x="0" y="60" font-family="-apple-system, sans-serif" font-size="28" fill="#d4d4d8">
+      10 个开源语料库 · 双押到八押 · 算法挖掘
+    </text>
+  </g>
+
+  <!-- Sample rhyme cluster -->
+  <g transform="translate(80, 470)" font-family="-apple-system, 'PingFang SC', sans-serif">
+    <text x="0" y="0" font-size="22" fill="#71717a">桂华静候 / 梅花清幽 / 伟大领袖 / 肥马轻裘</text>
+    <text x="0" y="44" font-size="22" fill="#71717a">耍啥子技巧 / 周郎把那赤壁烧 / 他被杂志洗脑</text>
+  </g>
+
+  <!-- Domain pill -->
+  <g transform="translate(80, 580)">
+    <text x="0" y="0" font-family="ui-monospace, 'SF Mono', monospace" font-size="22" fill="#71717a">
+      qianyangpeng.github.io/chinese-rhyme-finder
+    </text>
+  </g>
+</svg>

@@ -147,7 +147,15 @@
 </script>
 
 <svelte:head>
-  <title>{t('找押韵 · 世界最强押韵', 'Search · Rhyme Finder')}</title>
+  <title>{t('找押韵 · 中文押韵查询 · 世界最强押韵', 'Search Rhymes · Chinese Rhyme Finder')}</title>
+  <meta
+    name="description"
+    content={t(
+      '输入任意中文词组，从 80 万条短语里查出全部押韵候选 — 支持双押到多押，按严格到宽松分层显示。包括成语、说唱歌词、流行歌词、电影字幕、CC-CEDICT 词典等多源语料。',
+      'Enter any Chinese phrase to search 800k+ candidates for matching rhymes — multi-syllable depth, layered from strict to loose, drawn from idioms, hip-hop & pop lyrics, subtitles, and the CC-CEDICT dictionary.'
+    )}
+  />
+  <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/search/" />
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-6 py-12">
