@@ -20,18 +20,24 @@
   let mode = $state<SearchMode>('full');
   let toneMode = $state<ToneMode>('none');
   let requireTailMatch = $state(true);
+  /** Where in long candidates to look for the match window:
+   *    'tail'     — only at the end (default)
+   *    'anywhere' — slide across, surfaces mid-phrase rhyme groups too. */
+  let windowMode = $state<'tail' | 'anywhere'>('tail');
   let urlReady = $state(false);
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('q');
     const m = params.get('mode');
-    const t = params.get('tone');
+    const tParam = params.get('tone');
     const tailReq = params.get('tail_req');
+    const win = params.get('win');
     if (q) query = q;
     if (m === 'tail') mode = 'tail';
-    if (t === 'exact' || t === 'pingze') toneMode = t;
+    if (tParam === 'exact' || tParam === 'pingze') toneMode = tParam;
     if (tailReq === '0') requireTailMatch = false;
+    if (win === 'anywhere') windowMode = 'anywhere';
     urlReady = true;
 
     // Fire-and-forget: swap in the big lexicon once it loads.
@@ -49,6 +55,7 @@
     if (mode !== 'full') params.set('mode', mode);
     if (toneMode !== 'none') params.set('tone', toneMode);
     if (!requireTailMatch) params.set('tail_req', '0');
+    if (windowMode !== 'tail') params.set('win', windowMode);
     const qs = params.toString();
     const url = `${base}/search/${qs ? '?' + qs : ''}`;
     if (window.location.pathname + window.location.search !== url) {
@@ -82,13 +89,27 @@
     mode === 'full' && queryFinals.length > 0
       ? searchByFinals(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
-          maxPerBucket: 30,
+          // Generous cap — same-length-first sort guarantees short
+          // dictionary words still surface even when there are
+          // thousands of long-phrase candidates at the same level.
+          maxPerBucket: 80,
           toneMode,
           targetTones: queryTones,
-          requireTailMatch
+          requireTailMatch,
+          windowMode
         })
       : null
   );
+
+  // ── Hover-to-highlight ─────────────────────────────────────────────
+  // When the user hovers a syllable chip in the input "韵母模式" row,
+  // every result card highlights matching syllables (same composed key).
+  let hoveredKey = $state<string | null>(null);
+  function hoverInputSyl(idx: number) {
+    if (idx < 0 || idx >= queryFinals.length) { hoveredKey = null; return; }
+    hoveredKey = queryFinals[idx];
+  }
+  function clearHover() { hoveredKey = null; }
 
   const tailResult = $derived(
     mode === 'tail' && queryFinals.length > 0
@@ -179,6 +200,26 @@
       />
       <span title={t('末位（最后一个字）必须押韵，不押就不是押韵', 'The last syllable must rhyme — otherwise it is not a rhyme')}>{t('必须押韵', 'must rhyme')}</span>
     </label>
+
+    <span class="ml-4 text-zinc-500">{t('匹配位置：', 'Window:')}</span>
+    <button
+      class="rounded border px-2.5 py-1 text-xs transition {windowMode === 'tail'
+        ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+      title={t('只在长短语的末尾找押韵窗口', 'Only check the end of longer phrases')}
+      onclick={() => (windowMode = 'tail')}
+    >
+      {t('句末', 'Tail only')}
+    </button>
+    <button
+      class="rounded border px-2.5 py-1 text-xs transition {windowMode === 'anywhere'
+        ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+      title={t('在长短语任意位置滑窗找押韵 — 包括句中', 'Slide the window through long phrases — finds mid-phrase rhymes too')}
+      onclick={() => (windowMode = 'anywhere')}
+    >
+      {t('句中+句末', 'Anywhere')}
+    </button>
   </div>
 
   <!-- Query input -->
@@ -206,11 +247,17 @@
   <!-- Query analysis breadcrumb -->
   {#if querySyllables.length > 0}
     <div class="mt-3 flex flex-wrap items-center gap-1.5 font-mono text-xs">
-      <span class="text-zinc-500">{t('韵母模式：', 'Rhyme pattern:')}</span>
+      <span class="text-zinc-500">{t('韵母模式：', 'Rhyme pattern:')} <span class="text-[10px] opacity-70">{t('（悬停高亮）', '(hover to highlight)')}</span></span>
       {#each querySyllables as s, i (i)}
+        {@const isHov = hoveredKey !== null && s.final === hoveredKey}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <span
-          class="rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300"
+          class="rounded border px-1.5 py-0.5 cursor-default transition-all {isHov
+            ? 'border-sky-500 bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200 scale-110 shadow'
+            : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300'}"
           title="{s.char} · {s.pinyinWithTone} · {s.final || '?'}"
+          onmouseenter={() => hoverInputSyl(i)}
+          onmouseleave={clearHover}
         >
           <span class="font-sans text-sm">{s.char}</span>
           <span class="ml-1 opacity-60">{s.final}</span>
@@ -275,28 +322,45 @@
 
             <ul class="space-y-2">
               {#each bucket.hits as hit (hit.phrase.text)}
+                {@const winStart = hit.matchOffset}
+                {@const winEnd = winStart + hit.match.perPosition.length}
+                {@const phraseChars = [...hit.phrase.text].filter((ch) => /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch))}
                 <li class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
-                  <div class="mb-1.5 flex items-baseline justify-between">
-                    <span class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                      {hit.phrase.text}
+                  <div class="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span class="flex-1 text-base font-semibold">
+                      {#each phraseChars as ch, i (i)}
+                        {@const inWindow = i >= winStart && i < winEnd}
+                        {@const matched = inWindow && hit.match.perPosition[i - winStart]}
+                        <span class="{inWindow
+                          ? matched
+                            ? 'text-emerald-700 dark:text-emerald-400 underline decoration-emerald-400/60 decoration-2 underline-offset-4'
+                            : 'text-rose-600 dark:text-rose-400'
+                          : 'text-zinc-500 dark:text-zinc-500'}">{ch}</span>
+                      {/each}
                     </span>
-                    <span class="font-mono text-xs text-zinc-400">
-                      {hit.match.matchedPositions.length}/{hit.match.comparedLength} {t('押', 'rhymed')}
+                    <span class="shrink-0 font-mono text-xs text-zinc-400">
+                      {hit.match.matchedPositions.length}/{hit.match.comparedLength} {t('押', 'rhymed')}{winStart > 0 ? t(' · 句中', ' · mid') : ''}
                     </span>
                   </div>
                   <div class="flex flex-wrap items-center gap-1 font-mono text-xs">
                     {#each hit.phrase.finals as f, i (i)}
+                      {@const inWindow = i >= winStart && i < winEnd}
+                      {@const matched = inWindow && hit.match.perPosition[i - winStart]}
+                      {@const isHov = hoveredKey !== null && f === hoveredKey}
                       <span
-                        class="rounded px-1.5 py-0.5 {hit.match.perPosition[i]
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : 'bg-rose-100 text-rose-900'}"
+                        class="rounded px-1.5 py-0.5 transition-all {matched
+                          ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+                          : inWindow
+                            ? 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200'
+                            : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500'}
+                          {isHov ? 'ring-2 ring-sky-500 scale-110 z-10' : ''}"
                       >
                         {f}
                       </span>
                     {/each}
                     {#if hit.phrase.tags.length > 0}
                       <span class="ml-auto text-zinc-400">
-                        {hit.phrase.tags.map((t) => `#${t}`).join(' ')}
+                        {hit.phrase.tags.map((tag) => `#${tag}`).join(' ')}
                       </span>
                     {/if}
                   </div>
@@ -341,17 +405,19 @@
                   <div class="flex flex-wrap items-center gap-1 font-mono text-xs">
                     {#each hit.phrase.finals as f, i (i)}
                       {@const inTail = i >= hit.phrase.finals.length - hit.tailK}
+                      {@const isHov = hoveredKey !== null && f === hoveredKey}
                       <span
-                        class="rounded px-1.5 py-0.5 {inTail
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}"
+                        class="rounded px-1.5 py-0.5 transition-all {inTail
+                          ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+                          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}
+                          {isHov ? 'ring-2 ring-sky-500 scale-110 z-10' : ''}"
                       >
                         {f}
                       </span>
                     {/each}
                     {#if hit.phrase.tags.length > 0}
                       <span class="ml-auto text-zinc-400">
-                        {hit.phrase.tags.map((t) => `#${t}`).join(' ')}
+                        {hit.phrase.tags.map((tag) => `#${tag}`).join(' ')}
                       </span>
                     {/if}
                   </div>

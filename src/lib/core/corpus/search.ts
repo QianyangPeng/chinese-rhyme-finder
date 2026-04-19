@@ -21,6 +21,11 @@ export interface SearchHit {
   readonly match: RhymeMatch;
   /** 0 = strict full match, k = exactly k positions mismatched. */
   readonly level: number;
+  /** Where the matching window starts inside `phrase.finals` (0-indexed
+   *  syllable position). For same-length matches this is always 0; for
+   *  longer phrases it tells the renderer where to align the per-position
+   *  match annotations so they highlight the right characters. */
+  readonly matchOffset: number;
 }
 
 export interface SearchBucket {
@@ -54,12 +59,16 @@ export interface SearchOptions {
    *  encode the tone; a candidate must match tone in addition to韵母
    *  to count as rhyming at that position. Default 'none'. */
   readonly toneMode?: ToneMode;
-  /** When true, only return candidates whose LAST syllable matches the
-   *  target's last syllable (under the active scheme + toneMode). The
-   *  relaxation count then counts how many NON-tail positions are off.
-   *  Default **true** — matches the user expectation that an end rhyme
-   *  is required for something to be called rhyme at all. */
+  /** When true, only return candidates whose LAST syllable in the matching
+   *  window matches the target's last syllable. The relaxation count then
+   *  counts how many NON-tail positions are off. Default **true**. */
   readonly requireTailMatch?: boolean;
+  /** Match window placement for phrases longer than the target:
+   *   - 'tail'     — match only at the end of the candidate (default).
+   *   - 'anywhere' — slide the window across the candidate; pick the
+   *                  best window. Surfaces e.g. "降维打击" rhymes inside
+   *                  "我喜欢降维打击的快感". */
+  readonly windowMode?: 'tail' | 'anywhere';
 }
 
 const DEFAULT_MAX_PER_BUCKET = 50;
@@ -87,6 +96,7 @@ export function searchByFinals(
   const toneMode: ToneMode = options.toneMode ?? 'none';
   const targetTones = options.targetTones;
   const requireTailMatch = options.requireTailMatch ?? true;
+  const windowMode = options.windowMode ?? 'tail';
 
   // Pre-compose target keys with tone info if requested.
   const targetKeys = target.map((f, i) =>
@@ -125,14 +135,19 @@ export function searchByFinals(
     buckets[match.relaxationLevel].push({
       phrase,
       match,
-      level: match.relaxationLevel
+      level: match.relaxationLevel,
+      matchOffset: 0
     });
   }
 
-  // ── Pass 2: longer phrases — match their TAIL against the target ───
-  // For each phrase longer than the target, extract the last N rhyme
-  // keys and compare them against the full target. This allows "星空"
-  // to match "满天星空" where the last 2 syllables rhyme.
+  // ── Pass 2: longer phrases — slide a window of size targetLength ───
+  // Window placement depends on `windowMode`:
+  //   - 'tail'     — only check the tail position (offset = N - L)
+  //   - 'anywhere' — every starting offset 0 ≤ o ≤ N - L; pick best window
+  //                  (lowest relaxation, then largest offset so we still
+  //                  prefer end rhymes when ties).
+  // This allows "降维打击" to match "我超喜欢降维打击" or longer lyrics
+  // lines that contain the target as an internal rhyme group.
   if (targetLength > 0) {
     for (const [phraseLen, ids] of lexicon.byLength) {
       if (phraseLen <= targetLength) continue;
@@ -141,31 +156,51 @@ export function searchByFinals(
         const phrase = lexicon.phrases[id];
         if (excludeText !== undefined && phrase.text === excludeText) continue;
 
-        // Compose keys for the candidate's TAIL only (last targetLength syllables).
-        const offset = phrase.length - targetLength;
-        const tailKeys: string[] = new Array(targetLength);
-        for (let i = 0; i < targetLength; i++) {
-          tailKeys[i] = composeKey(
-            phrase.finals[offset + i],
-            (phrase.tones?.[offset + i] ?? 0) as Tone,
+        // Compose ALL candidate keys once so multiple windows reuse them.
+        const candKeys: string[] = new Array(phrase.length);
+        for (let i = 0; i < phrase.length; i++) {
+          candKeys[i] = composeKey(
+            phrase.finals[i],
+            (phrase.tones?.[i] ?? 0) as Tone,
             scheme,
             toneMode
           );
         }
 
-        const match = matchFullKeys(targetKeys, tailKeys);
-        if (!match) continue;
-        if (match.relaxationLevel > maxLevel) continue;
-        if (requireTailMatch && targetLength > 0) {
-          const last = match.perPosition.length - 1;
-          if (last >= 0 && !match.perPosition[last]) continue;
+        const tailOffset = phrase.length - targetLength;
+        const startOffset = windowMode === 'anywhere' ? 0 : tailOffset;
+
+        let bestMatch: RhymeMatch | null = null;
+        let bestOffset = -1;
+        for (let off = startOffset; off <= tailOffset; off++) {
+          const window = candKeys.slice(off, off + targetLength);
+          const m = matchFullKeys(targetKeys, window);
+          if (!m) continue;
+          if (m.relaxationLevel > maxLevel) continue;
+          if (requireTailMatch) {
+            const last = m.perPosition.length - 1;
+            if (last >= 0 && !m.perPosition[last]) continue;
+          }
+          // Prefer lower relaxation; tie-break: prefer the tail position
+          // (largest offset) so end-rhymes still win ties.
+          if (
+            !bestMatch ||
+            m.relaxationLevel < bestMatch.relaxationLevel ||
+            (m.relaxationLevel === bestMatch.relaxationLevel && off > bestOffset)
+          ) {
+            bestMatch = m;
+            bestOffset = off;
+          }
         }
 
-        buckets[match.relaxationLevel].push({
-          phrase,
-          match,
-          level: match.relaxationLevel
-        });
+        if (bestMatch) {
+          buckets[bestMatch.relaxationLevel].push({
+            phrase,
+            match: bestMatch,
+            level: bestMatch.relaxationLevel,
+            matchOffset: bestOffset
+          });
+        }
       }
     }
   }
@@ -176,8 +211,13 @@ export function searchByFinals(
     const bucket = buckets[level];
     if (bucket.length === 0) continue;
 
-    // Sort: higher quality first, then alphabetical for stability.
+    // Sort: same-length-as-target first (so basic 2-char dictionary
+    // words don't get squeezed out of a 30-cap bucket by 4-char idioms),
+    // then by quality, then alphabetical.
     bucket.sort((a, b) => {
+      const aSame = a.phrase.length === targetLength ? 1 : 0;
+      const bSame = b.phrase.length === targetLength ? 1 : 0;
+      if (aSame !== bSame) return bSame - aSame;
       if (b.phrase.quality !== a.phrase.quality) {
         return b.phrase.quality - a.phrase.quality;
       }
