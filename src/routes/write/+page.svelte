@@ -26,6 +26,7 @@
   import { t } from '$lib/stores/lang.svelte';
   import { searchClient } from '$lib/workers/searchClient.svelte';
   import ParagraphCard from '$lib/components/write/ParagraphCard.svelte';
+  import AnchorCard from '$lib/components/write/AnchorCard.svelte';
   import DraftsPanel from '$lib/components/write/DraftsPanel.svelte';
 
   // ── Dict set for auto-anchor detection ───────────────────────────
@@ -247,6 +248,40 @@
   }
 
   const currentTitle = $derived(drafts.current?.title ?? t('未命名草稿', 'Untitled'));
+
+  // ── Insert candidate into the focused paragraph's textarea ────────
+  // Candidates live in the right panel (not inside each paragraph),
+  // so the insert helper here routes by focused paragraph id and
+  // reaches the textarea via its DOM id. Cursor is placed after the
+  // inserted text.
+  function insertIntoFocused(insertion: string) {
+    if (!focusedParagraphId) return;
+    const el = document.getElementById(
+      `paragraph-textarea-${focusedParagraphId}`
+    ) as HTMLTextAreaElement | null;
+    if (!el) return;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    const before = el.value.slice(0, start);
+    const after = el.value.slice(end);
+    const newText = before + insertion + after;
+    handleTextChange(focusedParagraphId, newText);
+    // Reposition cursor after the flush.
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + insertion.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  // ── Derived view: focused paragraph's panel-worthy anchors ───────
+  const focusedAnchors = $derived(
+    focusedParagraphId ? (paragraphAnchors[focusedParagraphId] ?? []) : []
+  );
+  const panelAnchors = $derived(focusedAnchors.filter((a) => a.showsPanel));
+  const focusedIndex = $derived(
+    focusedParagraphId ? paragraphs.findIndex((p) => p.id === focusedParagraphId) : -1
+  );
 </script>
 
 <svelte:head>
@@ -261,79 +296,125 @@
   <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/write/" />
 </svelte:head>
 
-<div class="mx-auto max-w-7xl px-4 py-6">
+<div class="mx-auto max-w-[80rem]">
   <!-- Title bar -->
-  <header class="mb-5 flex items-baseline justify-between gap-3">
+  <header class="flex items-baseline justify-between gap-3 px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
     <div class="min-w-0">
-      <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <h1 class="font-serif text-xl font-bold tracking-wide text-zinc-900 dark:text-zinc-100">
         {t('写作', 'Write')}
       </h1>
       <p class="text-xs text-zinc-500 truncate">{currentTitle}</p>
     </div>
     <div class="flex shrink-0 items-center gap-1.5 text-xs">
       <button
-        class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+        class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => (draftsOpen = true)}
       >
-        💾 {t('草稿', 'Drafts')} ({drafts.drafts.length})
+        {t('草稿', 'Drafts')} ({drafts.drafts.length})
       </button>
       <button
-        class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+        class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={handleCopy}
       >
         {#if copiedAt && Date.now() - copiedAt < 2000}
           ✓ {t('已复制', 'Copied')}
         {:else}
-          📋 {t('复制全部', 'Copy all')}
+          {t('复制', 'Copy')}
         {/if}
       </button>
       <button
-        class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+        class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={handleDownload}
       >
-        ⬇ {t('下载', 'Download')}
+        {t('下载', 'Download')}
       </button>
     </div>
   </header>
 
-  <!-- Paragraph stack -->
-  <div class="space-y-4">
-    {#each paragraphs as para, idx (para.id)}
-      <ParagraphCard
-        paragraphId={para.id}
-        text={para.text}
-        anchors={paragraphAnchors[para.id] ?? []}
-        focused={focusedParagraphId === para.id}
-        index={idx}
-        hoveredKey={hoveredKey}
-        onTextChange={(txt) => handleTextChange(para.id, txt)}
-        onFocus={() => (focusedParagraphId = para.id)}
-        onManualAnchorsChange={(manual) => handleManualAnchorsChange(para.id, manual)}
-        onAnchorToneMode={(anchorId, tm) => handleAnchorToneMode(para.id, anchorId, tm)}
-        onDelete={() => deleteParagraph(para.id)}
-        onHoverKey={(k) => (hoveredKey = k)}
-      />
-    {/each}
-  </div>
+  <!-- Grid: editor (left, flexible) + candidate panel (right, 22rem) -->
+  <div class="grid grid-cols-1 md:grid-cols-[1fr_22rem]">
+    <!-- LEFT: paragraph stack -->
+    <div class="md:border-r md:border-zinc-100 md:dark:border-zinc-800">
+      {#each paragraphs as para, idx (para.id)}
+        <ParagraphCard
+          paragraphId={para.id}
+          text={para.text}
+          anchors={paragraphAnchors[para.id] ?? []}
+          focused={focusedParagraphId === para.id}
+          index={idx}
+          onTextChange={(txt) => handleTextChange(para.id, txt)}
+          onFocus={() => (focusedParagraphId = para.id)}
+          onManualAnchorsChange={(manual) => handleManualAnchorsChange(para.id, manual)}
+          onDelete={() => deleteParagraph(para.id)}
+        />
+      {/each}
 
-  <!-- New-paragraph button -->
-  <div class="mt-4 flex justify-center">
-    <button
-      class="rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 hover:border-sky-400 hover:text-sky-600 dark:hover:border-sky-600 dark:hover:text-sky-400"
-      onclick={addParagraph}
-    >
-      + {t('新段落', 'New paragraph')}
-    </button>
+      <!-- New-paragraph button -->
+      <div class="p-4 text-center">
+        <button
+          class="rounded-md border border-dashed border-zinc-300 dark:border-zinc-700 bg-transparent px-5 py-1.5 text-xs text-zinc-500 hover:border-amber-400 hover:text-amber-600 dark:hover:border-amber-600 dark:hover:text-amber-400"
+          onclick={addParagraph}
+        >
+          + {t('新段落', 'New paragraph')}
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: candidate panel for focused paragraph -->
+    <aside class="hidden md:block">
+      {#if focusedParagraphId && panelAnchors.length > 0}
+        <div class="sticky top-0 bg-white dark:bg-zinc-950">
+          <!-- Panel header -->
+          <div class="flex items-baseline justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 px-3 py-2">
+            <span class="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">
+              {t(`段落 ${focusedIndex + 1} 的押韵`, `Paragraph ${focusedIndex + 1} rhymes`)}
+            </span>
+            <span class="text-[10px] text-zinc-400">
+              {t(`${panelAnchors.length} 个锚点`, `${panelAnchors.length} anchors`)}
+            </span>
+          </div>
+          <!-- Anchor sections -->
+          <div>
+            {#each panelAnchors as anchor (anchor.id)}
+              <AnchorCard
+                {anchor}
+                active={true}
+                hoveredKey={hoveredKey}
+                onToneModeChange={(tm) => handleAnchorToneMode(focusedParagraphId ?? '', anchor.id, tm)}
+                onRemove={() => {
+                  // Only manual anchors are removable via the panel.
+                  if (anchor.auto) return;
+                  const current = paragraphs.find((p) => p.id === focusedParagraphId);
+                  if (!current) return;
+                  handleManualAnchorsChange(
+                    focusedParagraphId ?? '',
+                    current.manualAnchors.filter((a) => a.id !== anchor.id)
+                  );
+                }}
+                onInsertCandidate={insertIntoFocused}
+                onHoverKey={(k) => (hoveredKey = k)}
+              />
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <div class="p-6 text-center text-xs text-zinc-400">
+          {#if !focusedParagraphId}
+            {t('点击左侧一个段落，这里会显示它的押韵候选', 'Click a paragraph on the left to see its rhyme candidates')}
+          {:else}
+            {t('该段落暂无押韵锚点', 'No rhyme anchors for this paragraph yet')}
+          {/if}
+        </div>
+      {/if}
+    </aside>
   </div>
 
   <!-- Footer hint -->
-  <footer class="mt-8 border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs text-zinc-400">
-    <p>
-      {t(
-        '默认：每行末尾的词（字典最长匹配）自动成为押韵锚点。选中任意字段可添加为额外锚点。每个锚点可单独选择严格度（韵母 / 韵母+声调）。',
-        'Default: each line\'s last dictionary-word becomes an auto anchor. Select any text to add a manual anchor. Each anchor has its own strictness toggle (rhyme only / rhyme + tone).'
-      )}
-    </p>
+  <footer class="border-t border-zinc-100 dark:border-zinc-800 px-4 py-3 text-[11px] text-zinc-400">
+    {t(
+      '每行末尾的词自动成为押韵锚点；不押的行尾会成新锚点，押同韵的被同色标出。选中句中任意字段可加为额外锚点。',
+      "Each line's tail auto-anchors; non-rhyming tails form new anchors while matching tails share color. Select any word to add a manual anchor."
+    )}
   </footer>
 </div>
 

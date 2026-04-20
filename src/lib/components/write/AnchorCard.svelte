@@ -12,8 +12,9 @@
    * text at the current cursor in the parent paragraph's textarea.
    */
   import { parseSyllables } from '$lib/core/pinyin';
-  import type { Anchor, ToneMode } from '$lib/core/write/anchors';
+  import type { GroupedAnchor, ToneMode } from '$lib/core/write/anchors';
   import { sourceMeta } from '$lib/util/sources';
+  import { rhymeColor } from '$lib/util/rhymeColors';
   import {
     searchClient,
     type GroupedSearchResult,
@@ -22,7 +23,7 @@
   import { t, lang } from '$lib/stores/lang.svelte';
 
   interface Props {
-    anchor: Anchor;
+    anchor: GroupedAnchor;
     /** Whether this anchor belongs to the currently-focused paragraph.
      *  Only active anchors fetch candidates — saves worker cycles when
      *  the user has many paragraphs with many anchors. */
@@ -159,38 +160,51 @@
     if (lv === 0) return t('全押', 'Full');
     return t(`${lv}位放宽`, `-${lv}`);
   }
+
+  // ── Rhyme-group colors (shared palette) ─────────────────────────
+  const colors = $derived(rhymeColor(anchor.colorIdx));
 </script>
 
-<article class="rounded-lg border {anchor.auto ? 'border-sky-200 dark:border-sky-800 bg-sky-50/40 dark:bg-sky-950/20' : 'border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20'} p-3 text-xs">
-  <!-- Header: text + tone toggle + remove -->
-  <header class="mb-2 flex items-center justify-between gap-2">
+<article class="border-b border-zinc-100 dark:border-zinc-800 text-xs">
+  <!-- Header: colored left bar + anchor in matching box + pinyin + location + tone toggles + remove -->
+  <header
+    class="flex items-center justify-between gap-2 px-3 py-2"
+    style="border-left: 4px solid {colors.border}; background: {colors.bg};"
+  >
     <div class="flex items-baseline gap-2 min-w-0">
-      <span class="font-sans text-base font-semibold text-zinc-900 dark:text-zinc-100 truncate">{anchor.text}</span>
+      <span
+        class="font-sans text-[14px] font-semibold truncate"
+        style="border: 1.5px solid {colors.border}; border-radius: 4px; padding: 0 6px; background: {colors.bg};"
+      >{anchor.text}</span>
       <span class="font-mono text-[10px] text-zinc-500 truncate">{syllables.map((s) => s.pinyinWithTone).join(' ')}</span>
-      {#if anchor.auto}
-        <span class="shrink-0 rounded bg-sky-200 dark:bg-sky-900/60 px-1.5 py-0.5 text-[9px] text-sky-900 dark:text-sky-200">
-          {t(`第 ${(anchor.lineIndex ?? 0) + 1} 行尾`, `L${(anchor.lineIndex ?? 0) + 1} tail`)}
+      {#if anchor.auto && anchor.lineIndex !== undefined}
+        <span class="shrink-0 text-[9px] text-zinc-500">
+          {t(`L${(anchor.lineIndex ?? 0) + 1} 尾`, `L${(anchor.lineIndex ?? 0) + 1}`)}
+        </span>
+      {:else if !anchor.auto}
+        <span class="shrink-0 text-[9px] text-zinc-500">
+          {t('手选', 'picked')}
         </span>
       {/if}
     </div>
     <div class="flex shrink-0 items-center gap-1">
       <button
-        class="rounded border px-1.5 py-0.5 text-[10px] {anchor.toneMode === 'none'
-          ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-          : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+        class="rounded px-1.5 py-0.5 text-[10px] {anchor.toneMode === 'none'
+          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+          : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
         title={t('只比韵母', 'Rhyme only')}
         onclick={() => onToneModeChange('none')}
-      >{t('韵母', 'Rhyme')}</button>
+      >{t('韵', 'R')}</button>
       <button
-        class="rounded border px-1.5 py-0.5 text-[10px] {anchor.toneMode === 'exact'
-          ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-          : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+        class="rounded px-1.5 py-0.5 text-[10px] {anchor.toneMode === 'exact'
+          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+          : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
         title={t('韵母 + 声调', 'Rhyme + tone')}
         onclick={() => onToneModeChange('exact')}
-      >{t('+声调', '+Tone')}</button>
+      >{t('+调', '+T')}</button>
       {#if !anchor.auto}
         <button
-          class="rounded p-1 text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
+          class="rounded p-0.5 text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
           title={t('删除这个锚点', 'Remove anchor')}
           onclick={onRemove}
           aria-label={t('删除这个锚点', 'Remove anchor')}
@@ -198,6 +212,9 @@
       {/if}
     </div>
   </header>
+
+  <!-- Body container with small side padding -->
+  <div class="px-3 py-2">
 
   <!-- Target finals chips -->
   {#if targetFinals.length > 0}
@@ -342,4 +359,6 @@
       {/each}
     </div>
   {/if}
+
+  </div><!-- /.body -->
 </article>
