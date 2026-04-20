@@ -169,27 +169,25 @@
     fullRes: ReturnType<typeof searchByFinals> | null
   ): TailGroup[][] {
     if (!fullRes) return [];
-    // Return an array-of-arrays: one level per outer, groups inside.
     return fullRes.buckets.map((bucket) => {
       const byTail = new Map<string, TailGroup>();
       for (const hit of bucket.hits) {
-        const chars = [...hit.phrase.text].filter((ch) =>
-          /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)
-        );
-        const winStart = hit.matchOffset;
-        const winEnd = winStart + hit.match.perPosition.length;
-        const tailText = chars.slice(winStart, winEnd).join('');
+        // tailText is precomputed on each SearchHit — no more per-hit
+        // CJK filtering in the hot path.
+        const tailText = hit.tailText;
         // Group key: tailText + (perPos pattern) so Level-1 partial
         // matches don't merge with Level-0 full matches under the
         // same tail.
-        const perPatternKey = hit.match.perPosition.map((b) => (b ? '1' : '0')).join('');
+        let perPatternKey = '';
+        const per = hit.match.perPosition;
+        for (let i = 0; i < per.length; i++) perPatternKey += per[i] ? '1' : '0';
         const key = tailText + '#' + perPatternKey;
         let g = byTail.get(key);
         if (!g) {
           g = {
             tailText,
             level: bucket.level,
-            perPosition: hit.match.perPosition,
+            perPosition: per,
             hits: [],
             properNounCount: 0
           };
@@ -208,7 +206,6 @@
         });
         if (isProper) g.properNounCount++;
       }
-      // Sort groups: bigger groups first, then fewer proper-nouns first.
       return Array.from(byTail.values()).sort((a, b) => {
         if (a.hits.length !== b.hits.length) return b.hits.length - a.hits.length;
         const aProperRatio = a.properNounCount / a.hits.length;

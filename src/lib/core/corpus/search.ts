@@ -34,6 +34,34 @@ function isProperNoun(phrase: PhraseRecord): boolean {
   return false;
 }
 
+/** CJK-chars cache — phrase.text → char array. Called inside every
+ *  search hit's tail-text computation. Since `phrase` is the same
+ *  object across searches, a WeakMap gives O(1) reuse. */
+const _cjkCharsCache = new WeakMap<PhraseRecord, string[]>();
+const _CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/;
+function getCjkChars(phrase: PhraseRecord): string[] {
+  let cached = _cjkCharsCache.get(phrase);
+  if (cached) return cached;
+  cached = [];
+  for (const ch of phrase.text) {
+    if (_CJK_RE.test(ch)) cached.push(ch);
+  }
+  _cjkCharsCache.set(phrase, cached);
+  return cached;
+}
+
+/** Slice the tail-text substring from a phrase given the match window. */
+function sliceTailText(phrase: PhraseRecord, matchOffset: number, windowLen: number): string {
+  const chars = getCjkChars(phrase);
+  if (chars.length === phrase.length) {
+    // Fast path: every CJK char counts, so the phrase.finals index maps
+    // 1:1 to chars. Slice directly.
+    return chars.slice(matchOffset, matchOffset + windowLen).join('');
+  }
+  // Fallback (rare: phrase with mixed non-CJK content) — still correct.
+  return chars.slice(matchOffset, matchOffset + windowLen).join('');
+}
+
 export interface SearchHit {
   /** The matched phrase. */
   readonly phrase: PhraseRecord;
@@ -46,6 +74,10 @@ export interface SearchHit {
    *  longer phrases it tells the renderer where to align the per-position
    *  match annotations so they highlight the right characters. */
   readonly matchOffset: number;
+  /** The substring of phrase.text that corresponds to the match window.
+   *  Precomputed so the group-by-tail UI doesn't re-split + re-filter
+   *  every render. Example: "了吗" when 好了吗 matches target 喇叭. */
+  readonly tailText: string;
 }
 
 export interface SearchBucket {
@@ -206,7 +238,8 @@ export function searchByFinals(
         if (last >= 0 && !match.perPosition[last]) continue;
       }
       buckets[match.relaxationLevel].push({
-        phrase, match, level: match.relaxationLevel, matchOffset: 0
+        phrase, match, level: match.relaxationLevel, matchOffset: 0,
+        tailText: sliceTailText(phrase, 0, match.perPosition.length)
       });
     } else if (phrase.length > targetLength) {
       // Longer candidate: slide a window of size targetLength.
@@ -234,7 +267,8 @@ export function searchByFinals(
       }
       if (bestMatch) {
         buckets[bestMatch.relaxationLevel].push({
-          phrase, match: bestMatch, level: bestMatch.relaxationLevel, matchOffset: bestOffset
+          phrase, match: bestMatch, level: bestMatch.relaxationLevel, matchOffset: bestOffset,
+          tailText: sliceTailText(phrase, bestOffset, bestMatch.perPosition.length)
         });
       }
     } else {
@@ -251,7 +285,8 @@ export function searchByFinals(
         if (last >= 0 && !match.perPosition[last]) continue;
       }
       buckets[match.relaxationLevel].push({
-        phrase, match, level: match.relaxationLevel, matchOffset: 0
+        phrase, match, level: match.relaxationLevel, matchOffset: 0,
+        tailText: sliceTailText(phrase, 0, match.perPosition.length)
       });
     }
   }
