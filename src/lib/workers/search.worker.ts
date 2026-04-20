@@ -46,6 +46,13 @@ export interface TailGroup {
   tailChars: string[];
   perPosition: boolean[];
   properNounCount: number;
+  /** Total number of hits that fell into this group, including any
+   *  not present in `hits` because of the per-group cap. */
+  totalCount: number;
+  /** At most MAX_HITS_PER_GROUP members, sorted by quality desc then
+   *  by non-proper-noun first then alphabetical. Rest are counted in
+   *  `totalCount` but not shipped across the worker boundary (keeps
+   *  the structured-clone payload tiny so postMessage returns fast). */
   hits: GroupHit[];
 }
 
@@ -200,6 +207,12 @@ function isProper(p: PhraseRecord): boolean {
   return false;
 }
 
+/** Max hits per group shipped to main thread. Keeps postMessage
+ *  structured-clone payload small (~thousands of objects, not tens of
+ *  thousands). Users who want to browse more than 30 entries in a single
+ *  tail group would click a future "expand all" button that re-queries. */
+const MAX_HITS_PER_GROUP = 30;
+
 function runSearch(msg: Extract<IncomingMessage, { type: 'search' }>): GroupedSearchResult {
   const lex = currentLexicon();
   const result = searchByFinals(msg.target, strictScheme, lex, {
@@ -213,26 +226,28 @@ function runSearch(msg: Extract<IncomingMessage, { type: 'search' }>): GroupedSe
 
   // Group each bucket by (tailText + perPosition pattern).
   const levels: LevelGroups[] = result.buckets.map((bucket) => {
-    const byKey = new Map<string, TailGroup>();
+    const byKey = new Map<string, { g: TailGroup; all: GroupHit[] }>();
     for (const hit of bucket.hits) {
       const tailText = hit.tailText;
       let perKey = '';
       const per = hit.match.perPosition;
       for (let i = 0; i < per.length; i++) perKey += per[i] ? '1' : '0';
       const key = tailText + '#' + perKey;
-      let g = byKey.get(key);
-      if (!g) {
-        g = {
+      let entry = byKey.get(key);
+      if (!entry) {
+        const g: TailGroup = {
           tailText,
           tailChars: [...tailText],
           perPosition: per as boolean[],
           properNounCount: 0,
+          totalCount: 0,
           hits: []
         };
-        byKey.set(key, g);
+        entry = { g, all: [] };
+        byKey.set(key, entry);
       }
       const proper = isProper(hit.phrase);
-      g.hits.push({
+      entry.all.push({
         text: hit.phrase.text,
         source: hit.phrase.source,
         quality: hit.phrase.quality,
@@ -242,12 +257,23 @@ function runSearch(msg: Extract<IncomingMessage, { type: 'search' }>): GroupedSe
         tags: hit.phrase.tags as string[],
         properNoun: proper
       });
-      if (proper) g.properNounCount++;
+      entry.g.totalCount++;
+      if (proper) entry.g.properNounCount++;
     }
-    const groups = [...byKey.values()].sort((a, b) => {
-      if (a.hits.length !== b.hits.length) return b.hits.length - a.hits.length;
-      const aR = a.properNounCount / a.hits.length;
-      const bR = b.properNounCount / b.hits.length;
+    // For each group, sort its hits and keep only the top N so the
+    // structured-clone of the whole result stays small.
+    for (const entry of byKey.values()) {
+      entry.all.sort((a, b) => {
+        if (a.properNoun !== b.properNoun) return a.properNoun ? 1 : -1;
+        if (b.quality !== a.quality) return b.quality - a.quality;
+        return a.text.localeCompare(b.text, 'zh-Hans');
+      });
+      entry.g.hits = entry.all.slice(0, MAX_HITS_PER_GROUP);
+    }
+    const groups = [...byKey.values()].map(e => e.g).sort((a, b) => {
+      if (a.totalCount !== b.totalCount) return b.totalCount - a.totalCount;
+      const aR = a.properNounCount / a.totalCount;
+      const bR = b.properNounCount / b.totalCount;
       if (aR !== bR) return aR - bR;
       return a.tailText.localeCompare(b.tailText, 'zh-Hans');
     });

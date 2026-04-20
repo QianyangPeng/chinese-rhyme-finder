@@ -334,7 +334,7 @@
                           : 'text-rose-600 dark:text-rose-400'}">{ch}</span>
                       {/each}
                     </span>
-                    <span class="font-mono text-[10px] text-zinc-500">{g.hits.length}</span>
+                    <span class="font-mono text-[10px] text-zinc-500">{g.totalCount}</span>
                     <span class="text-zinc-400">{isOpen ? '▾' : '▸'}</span>
                   </button>
 
@@ -355,6 +355,11 @@
                           <span class="shrink-0 font-mono text-[10px] text-zinc-400">{hit.source.split('-')[0]}</span>
                         </li>
                       {/each}
+                      {#if g.totalCount > g.hits.length}
+                        <li class="px-1.5 py-1 text-[11px] italic text-zinc-400">
+                          {t(`…还有 ${g.totalCount - g.hits.length} 条`, `…and ${g.totalCount - g.hits.length} more`)}
+                        </li>
+                      {/if}
                     </ul>
                   {/if}
                 </li>
