@@ -7,10 +7,11 @@
 
 ---
 
-## 三大功能 · Three features
+## 四大功能 · Four features
 
 | | 中文 | English |
 |---|---|---|
+| ✍ | **写作** — 边写边押：多行编辑器 + 实时押韵分析 + Tab 补全押韵候选词 + AABB/ABAB/一韵到底 | **Write** — Write with live rhyme hints: multi-line editor, per-line analysis, Tab-to-insert candidates, AABB/ABAB/monorhyme schemes |
 | 🔥 | **押韵灵感** — 浏览算法自动发现的押韵组合，适合找灵感、看巧妙搭配 | **Discover** — Browse algorithm-mined rhyme clusters, great for inspiration and unexpected pairings |
 | 🔍 | **找押韵** — 输入一个词，从语料库里找出所有押韵候选，适合写歌词 / rap / 对联 | **Search** — Enter a phrase, get every rhyme candidate from the corpus. For lyrics, rap, couplets |
 | 📝 | **歌词分析** — 粘贴歌词，自动标注押韵位置、类型和深度 | **Analyze** — Paste lyrics to see rhyme positions, types, and depth auto-labeled |

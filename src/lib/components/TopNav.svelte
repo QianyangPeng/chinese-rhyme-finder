@@ -13,7 +13,8 @@
     { href: '/',         labelZh: '主页',     labelEn: 'Home',     emoji: '🏠' },
     { href: '/discover', labelZh: '押韵灵感', labelEn: 'Discover', emoji: '🔥' },
     { href: '/search',   labelZh: '找押韵',   labelEn: 'Search',   emoji: '🔍' },
-    { href: '/analyze',  labelZh: '歌词分析', labelEn: 'Analyze',  emoji: '📖' }
+    { href: '/analyze',  labelZh: '歌词分析', labelEn: 'Analyze',  emoji: '📖' },
+    { href: '/write',    labelZh: '写作',     labelEn: 'Write',    emoji: '✍' }
   ];
 
   /** Current pathname without the GitHub Pages base prefix. */

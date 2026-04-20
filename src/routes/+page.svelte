@@ -195,8 +195,17 @@
     </p>
   </header>
 
-  <!-- 三大功能入口 -->
-  <section class="mb-10 grid gap-4 sm:grid-cols-3">
+  <!-- 四大功能入口 -->
+  <section class="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <a
+      href="{base}/write/"
+      class="group rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-6 text-center shadow transition hover:shadow-lg hover:border-amber-500 dark:hover:border-amber-600 relative"
+    >
+      <span class="absolute -top-2 -right-2 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">NEW</span>
+      <p class="text-3xl">✍</p>
+      <h2 class="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('写作', 'Write')}</h2>
+      <p class="mt-1 text-sm text-zinc-500">{t('边写边押：实时押韵分析 + Tab 补全候选词', 'Write with live rhyme hints + Tab-to-insert candidates')}</p>
+    </a>
     <a
       href="{base}/discover/"
       class="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center shadow transition hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600"
