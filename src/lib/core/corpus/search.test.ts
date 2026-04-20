@@ -35,13 +35,14 @@ describe('searchByFinals · strict matches', () => {
     expect(texts).toContain('降维打击');
   });
 
-  it('returns same-length AND longer tail-matched results', () => {
+  it('returns hits across all candidate lengths ≥ 2', () => {
     const target = ['iang', 'uei', 'a', 'i']; // length 4
     const r = searchByFinals(target, strictScheme, lex);
-    // All hits must be at least as long as the target
+    // Candidates can be shorter (tail rhyme), equal, or longer — but
+    // single-syllable candidates are excluded (too noisy for rhymes).
     for (const bucket of r.buckets) {
       for (const hit of bucket.hits) {
-        expect(hit.phrase.length).toBeGreaterThanOrEqual(4);
+        expect(hit.phrase.length).toBeGreaterThanOrEqual(2);
       }
     }
     expect(r.targetLength).toBe(4);
@@ -154,9 +155,9 @@ describe('searchByTail', () => {
 });
 
 describe('searchByFinals · empty / no-match cases', () => {
-  it('returns no buckets when the lexicon has no phrases of that length', () => {
-    // length 100 — nothing in seed has 100 syllables
-    const target = new Array(100).fill('a');
+  it('a target with no rhyming finals yields no hits', () => {
+    // Finals that don't exist in Mandarin → no candidate can match them.
+    const target = ['zzz', 'zzz'];
     const r = searchByFinals(target, strictScheme, lex);
     expect(r.totalHits).toBe(0);
     expect(r.buckets).toHaveLength(0);

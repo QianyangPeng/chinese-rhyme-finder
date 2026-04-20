@@ -205,19 +205,71 @@ export function searchByFinals(
     }
   }
 
+  // ── Pass 3: SHORTER phrases — candidate's full sequence vs target's tail
+  // ──────────────────────────────────────────────────────────────────────
+  // When the target is "岁月静好" (4 syllables), "青岛" (2 syllables)
+  // should be a hit because its two finals match the target's last two.
+  // We compare the whole candidate against target[N-M ..N-1] — i.e., the
+  // candidate IS the rhyme window.
+  //
+  // Single-syllable candidates are skipped (too noisy — half the lexicon
+  // shares the last final).
+  if (targetLength >= 2) {
+    for (const [phraseLen, ids] of lexicon.byLength) {
+      if (phraseLen >= targetLength || phraseLen < 2) continue;
+      const M = phraseLen;
+      // Slice out the target's tail of length M — the reference window.
+      const targetTail = targetKeys.slice(targetLength - M);
+
+      for (const id of ids) {
+        if (seen.has(id)) continue;
+        const phrase = lexicon.phrases[id];
+        if (excludeText !== undefined && phrase.text === excludeText) continue;
+
+        const candKeys = phrase.finals.map((f, i) =>
+          composeKey(f, (phrase.tones?.[i] ?? 0) as Tone, scheme, toneMode)
+        );
+        const match = matchFullKeys(targetTail, candKeys);
+        if (!match) continue;
+        if (match.relaxationLevel > maxLevel) continue;
+        if (requireTailMatch) {
+          const last = match.perPosition.length - 1;
+          if (last >= 0 && !match.perPosition[last]) continue;
+        }
+
+        buckets[match.relaxationLevel].push({
+          phrase,
+          match,
+          level: match.relaxationLevel,
+          // The match spans the whole candidate — offset 0 inside phrase.
+          matchOffset: 0
+        });
+      }
+    }
+  }
+
   const out: SearchBucket[] = [];
   let totalHits = 0;
   for (let level = 0; level < buckets.length; level++) {
     const bucket = buckets[level];
     if (bucket.length === 0) continue;
 
-    // Sort: same-length-as-target first (so basic 2-char dictionary
-    // words don't get squeezed out of a 30-cap bucket by 4-char idioms),
-    // then by quality, then alphabetical.
+    // Sort within a level by a length-tier + quality + alphabetical key.
+    //
+    //   tier 0 — same length as target (most on-point; positional rhyme)
+    //   tier 1 — SHORTER than target (perfect tail rhyme of M/N chars —
+    //            still a clean rhyme pair like "岁月静好 ↔ 青岛")
+    //   tier 2 — LONGER than target (the target rhymes inside the candidate)
+    //
+    // Within a tier: higher quality first, then alphabetical for stability.
     bucket.sort((a, b) => {
-      const aSame = a.phrase.length === targetLength ? 1 : 0;
-      const bSame = b.phrase.length === targetLength ? 1 : 0;
-      if (aSame !== bSame) return bSame - aSame;
+      const aTier = a.phrase.length === targetLength ? 0
+        : a.phrase.length < targetLength ? 1
+        : 2;
+      const bTier = b.phrase.length === targetLength ? 0
+        : b.phrase.length < targetLength ? 1
+        : 2;
+      if (aTier !== bTier) return aTier - bTier;
       if (b.phrase.quality !== a.phrase.quality) {
         return b.phrase.quality - a.phrase.quality;
       }
