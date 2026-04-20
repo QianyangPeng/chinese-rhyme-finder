@@ -15,6 +15,56 @@
   import { rhymeColor } from '$lib/util/rhymeColors';
   import { t } from '$lib/stores/lang.svelte';
 
+  // ── HTML escaping for overlay rendering ─────────────────────────
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Render a single line as HTML with anchor substrings wrapped in
+   * colored `<span class="anchor-box">` elements. Uses paragraph-wide
+   * offsets to align anchors to the line-local substring.
+   *
+   * Only called for the overlay; produces transparent-text visuals.
+   * Anchors that start before or extend past this line are clipped to
+   * this line's [lineStart, lineEnd) range.
+   */
+  function renderLineHtml(
+    lineText: string,
+    lineStart: number,
+    lineAnchors: readonly GroupedAnchor[]
+  ): string {
+    const lineEnd = lineStart + lineText.length;
+    const relevant = lineAnchors
+      .filter((a) => a.start < lineEnd && a.end > lineStart)
+      .sort((a, b) => a.start - b.start);
+
+    if (relevant.length === 0) {
+      return escapeHtml(lineText) || '&nbsp;'; // empty line needs content to hold its height
+    }
+
+    let out = '';
+    let cursor = 0;
+    for (const a of relevant) {
+      const s = Math.max(0, a.start - lineStart);
+      const e = Math.min(lineText.length, a.end - lineStart);
+      if (s < cursor) continue; // anchor overlaps previous; skip (v1 — P4 overlap replace will prevent this)
+      if (s > cursor) out += escapeHtml(lineText.slice(cursor, s));
+      const colors = rhymeColor(a.colorIdx);
+      out +=
+        `<span class="anchor-box" style="box-shadow: inset 0 0 0 1.5px ${colors.border}; background: ${colors.bg}; border-radius: 4px;">` +
+        escapeHtml(lineText.slice(s, e)) +
+        '</span>';
+      cursor = e;
+    }
+    if (cursor < lineText.length) out += escapeHtml(lineText.slice(cursor));
+    return out || '&nbsp;';
+  }
+
   interface Props {
     paragraphId: string;
     text: string;
@@ -97,6 +147,27 @@
   const preview = $derived(
     text.trim().split('\n').filter((l) => l.trim())[0]?.slice(0, 24) ?? ''
   );
+
+  // ── Overlay lines ───────────────────────────────────────────────
+  /** Each line with its global start offset (used by the overlay to
+   *  align anchor spans to the paragraph's text offsets). */
+  const overlayLines = $derived.by(() => {
+    const lines = text.split('\n');
+    const out: { text: string; start: number }[] = [];
+    let offset = 0;
+    for (const line of lines) {
+      out.push({ text: line, start: offset });
+      offset += line.length + 1; // +1 for the '\n'
+    }
+    return out;
+  });
+
+  // Keep overlay's horizontal scroll in sync with textarea's.
+  let overlayEl = $state<HTMLDivElement | null>(null);
+  function syncScroll() {
+    if (!overlayEl || !textareaEl) return;
+    overlayEl.scrollLeft = textareaEl.scrollLeft;
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -162,8 +233,26 @@
       </div>
 
       {#if expanded}
-        <!-- Textarea zone -->
-        <div class="relative">
+        <!-- Textarea zone with overlay decorations -->
+        <div class="editor-body relative">
+          <!-- Decoration overlay: zebra rows + colored anchor boxes.
+               Sits BEHIND the textarea; text is transparent; the
+               textarea's transparent bg lets the decorations show
+               through. Fonts / sizes / paddings / line-heights are
+               kept identical so char positions align pixel-ish. -->
+          <div
+            bind:this={overlayEl}
+            class="decor-overlay"
+            aria-hidden="true"
+          >
+            {#each overlayLines as line, i (i)}
+              <div
+                class="decor-line"
+                class:decor-line-alt={i % 2 === 1}
+              >{@html renderLineHtml(line.text, line.start, anchors)}</div>
+            {/each}
+          </div>
+
           <textarea
             id="paragraph-textarea-{paragraphId}"
             bind:this={textareaEl}
@@ -173,16 +262,16 @@
             onclick={trackSelection}
             onselect={trackSelection}
             onfocus={onFocus}
+            onscroll={syncScroll}
             placeholder={t('在这里写…', 'Write here…')}
             rows={lineCount}
             spellcheck="false"
-            class="block w-full resize-none border-0 bg-transparent px-3 pb-2 font-sans text-[16px] text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-600"
-            style="line-height: 28px; padding-top: 8px;"
+            class="editor-textarea"
           ></textarea>
 
           {#if hasSelection}
             <!-- Floating "+ 加为押韵锚点" button, top-right of textarea -->
-            <div class="pointer-events-none absolute right-3 top-1 z-10">
+            <div class="pointer-events-none absolute right-3 top-1 z-20">
               <button
                 class="pointer-events-auto rounded-md bg-amber-500 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
                 onclick={(e) => { e.stopPropagation(); addAnchorFromSelection(); }}
@@ -196,3 +285,78 @@
     </div>
   </div>
 </article>
+
+<style>
+  /* Overlay + textarea share identical text metrics so anchor spans
+     align to the characters the user types. `white-space: pre` on
+     both means no wrap — long lines scroll horizontally in sync. */
+  .editor-body {
+    position: relative;
+  }
+
+  .decor-overlay,
+  .editor-textarea {
+    font-family: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+                 'Microsoft YaHei', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 28px;
+    padding: 8px 12px;
+    white-space: pre;
+    letter-spacing: 0;
+    margin: 0;
+  }
+
+  .decor-overlay {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+    color: transparent;
+    z-index: 0;
+  }
+
+  .decor-line {
+    height: 28px;
+    box-sizing: border-box;
+  }
+
+  /* Subtle zebra — visible in both themes without competing with the
+     anchor boxes. */
+  .decor-line-alt {
+    background: rgba(245, 158, 11, 0.035);
+  }
+  @media (prefers-color-scheme: dark) {
+    .decor-line-alt {
+      background: rgba(245, 158, 11, 0.05);
+    }
+  }
+
+  .editor-textarea {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    outline: none;
+    resize: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    color: rgb(24, 24, 27);
+  }
+  @media (prefers-color-scheme: dark) {
+    .editor-textarea {
+      color: rgb(244, 244, 245);
+    }
+  }
+  .editor-textarea::placeholder {
+    color: rgb(161, 161, 170);
+  }
+
+  /* Anchor box visuals: inline box-shadow (doesn't affect layout) +
+     tinted background. Inline styles on each span set the colors. */
+  :global(.decor-line .anchor-box) {
+    border-radius: 4px;
+  }
+</style>
