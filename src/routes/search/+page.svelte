@@ -85,19 +85,42 @@
   const queryFinals = $derived(querySyllables.map((s) => s.final));
   const queryTones = $derived(querySyllables.map((s) => s.tone));
 
+  // Debounced query so IME composition + fast typing doesn't kick off
+  // a new 100-500ms searchByFinals pass on every intermediate keystroke.
+  let debouncedQuery = $state('');
+  let debouncedMode = $state<SearchMode>('full');
+  let debouncedToneMode = $state<ToneMode>('none');
+  let debouncedRequireTailMatch = $state(true);
+  let debouncedWindowMode = $state<'tail' | 'anywhere'>('tail');
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => {
+    // Track all inputs that trigger a new search.
+    void query; void mode; void toneMode; void requireTailMatch; void windowMode;
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      debouncedQuery = query;
+      debouncedMode = mode;
+      debouncedToneMode = toneMode;
+      debouncedRequireTailMatch = requireTailMatch;
+      debouncedWindowMode = windowMode;
+    }, 180);
+  });
+
+  const debouncedSyllables = $derived(parseSyllables(debouncedQuery));
+  const debouncedFinals = $derived(debouncedSyllables.map((s) => s.final));
+  const debouncedTones = $derived(debouncedSyllables.map((s) => s.tone));
+
   const fullResult = $derived(
-    mode === 'full' && queryFinals.length > 0
-      ? searchByFinals(queryFinals, scheme, lexicon, {
-          excludeText: query.trim(),
-          // No cap — keep all candidates the search finds. The render
-          // layer below uses per-bucket `visibleCount` + "load more" so
-          // we don't mount tens of thousands of DOM nodes at once on
-          // very common patterns. Users see unlimited results on demand.
+    debouncedMode === 'full' && debouncedFinals.length > 0
+      ? searchByFinals(debouncedFinals, scheme, lexicon, {
+          excludeText: debouncedQuery.trim(),
+          // No cap — the render layer groups by tail-text so visible
+          // DOM stays light even with 80k+ raw candidates.
           maxPerBucket: Number.POSITIVE_INFINITY,
-          toneMode,
-          targetTones: queryTones,
-          requireTailMatch,
-          windowMode
+          toneMode: debouncedToneMode,
+          targetTones: debouncedTones,
+          requireTailMatch: debouncedRequireTailMatch,
+          windowMode: debouncedWindowMode
         })
       : null
   );
@@ -112,35 +135,133 @@
   }
   function clearHover() { hoveredKey = null; }
 
-  // ── Progressive disclosure ────────────────────────────────────────
-  // Search returns unbounded hits per bucket; render layer caps mount
-  // at PAGE_SIZE per bucket, expand on button click. Keeps the DOM
-  // light on very common queries while preserving all results.
-  const PAGE_SIZE = 100;
-  let visiblePerBucket = $state<Record<number, number>>({});
-  // Reset visible counts when query / mode / scheme changes.
+  // ── Group-by-tail rendering ────────────────────────────────────────
+  // 80k flat items is a real DOM bottleneck (AND useless — who scrolls
+  // 80k rhymes?). Group hits by the actual characters of their match
+  // window: all phrases ending in "了吗" group into one chip; click to
+  // expand the list. Collapsed view is ~500 chips instead of 80k rows.
+  //
+  // For grouping we use the CHARS of the match window in the phrase
+  // text — so "我吃了吗" and "好了吗" both group under tailText "了吗".
+
+  interface TailGroup {
+    tailText: string;                // e.g. "了吗"
+    level: number;                   // relaxation level of its hits
+    perPosition: readonly boolean[]; // same for all hits in the group
+    hits: Array<{
+      text: string;
+      source: string;
+      quality: number;
+      phraseLen: number;
+      matchOffset: number;
+      finals: readonly string[];
+      tags: readonly string[];
+      properNoun: boolean;
+    }>;
+    // Derived for sorting / display
+    properNounCount: number;
+  }
+
+  function groupByTail(
+    fullRes: ReturnType<typeof searchByFinals> | null
+  ): TailGroup[][] {
+    if (!fullRes) return [];
+    // Return an array-of-arrays: one level per outer, groups inside.
+    return fullRes.buckets.map((bucket) => {
+      const byTail = new Map<string, TailGroup>();
+      for (const hit of bucket.hits) {
+        const chars = [...hit.phrase.text].filter((ch) =>
+          /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)
+        );
+        const winStart = hit.matchOffset;
+        const winEnd = winStart + hit.match.perPosition.length;
+        const tailText = chars.slice(winStart, winEnd).join('');
+        // Group key: tailText + (perPos pattern) so Level-1 partial
+        // matches don't merge with Level-0 full matches under the
+        // same tail.
+        const perPatternKey = hit.match.perPosition.map((b) => (b ? '1' : '0')).join('');
+        const key = tailText + '#' + perPatternKey;
+        let g = byTail.get(key);
+        if (!g) {
+          g = {
+            tailText,
+            level: bucket.level,
+            perPosition: hit.match.perPosition,
+            hits: [],
+            properNounCount: 0
+          };
+          byTail.set(key, g);
+        }
+        const isProper = isProperFromSegments(hit.phrase.segments);
+        g.hits.push({
+          text: hit.phrase.text,
+          source: hit.phrase.source,
+          quality: hit.phrase.quality,
+          phraseLen: hit.phrase.length,
+          matchOffset: hit.matchOffset,
+          finals: hit.phrase.finals,
+          tags: hit.phrase.tags,
+          properNoun: isProper
+        });
+        if (isProper) g.properNounCount++;
+      }
+      // Sort groups: bigger groups first, then fewer proper-nouns first.
+      return Array.from(byTail.values()).sort((a, b) => {
+        if (a.hits.length !== b.hits.length) return b.hits.length - a.hits.length;
+        const aProperRatio = a.properNounCount / a.hits.length;
+        const bProperRatio = b.properNounCount / b.hits.length;
+        if (aProperRatio !== bProperRatio) return aProperRatio - bProperRatio;
+        return a.tailText.localeCompare(b.tailText, 'zh-Hans');
+      });
+    });
+  }
+
+  function isProperFromSegments(segs: ReadonlyArray<{ pos: string }> | undefined): boolean {
+    if (!segs || segs.length === 0) return false;
+    for (const s of segs) {
+      const pos = s.pos ?? '';
+      if (pos.startsWith('nr') || pos === 'ns' || pos === 'nt' || pos === 'nz') return true;
+    }
+    return false;
+  }
+
+  const groupedFullLevels = $derived(groupByTail(fullResult));
+
+  // Which groups are expanded.
+  let expandedGroups = $state<Set<string>>(new Set());
+  $effect(() => {
+    // Reset expansion when query or filters change.
+    void query; void mode; void toneMode; void requireTailMatch; void windowMode;
+    expandedGroups = new Set();
+  });
+  function toggleGroup(key: string) {
+    const next = new Set(expandedGroups);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    expandedGroups = next;
+  }
+
+  // Within each level, only mount the first N chips by default.
+  const LEVEL_CHIP_LIMIT = 300;
+  let chipLimitPerLevel = $state<Record<number, number>>({});
   $effect(() => {
     void query; void mode; void toneMode; void requireTailMatch; void windowMode;
-    visiblePerBucket = {};
+    chipLimitPerLevel = {};
   });
-  function shownCount(level: number): number {
-    return visiblePerBucket[level] ?? PAGE_SIZE;
+  function chipLimit(level: number): number {
+    return chipLimitPerLevel[level] ?? LEVEL_CHIP_LIMIT;
   }
-  function loadMore(level: number, total: number) {
-    visiblePerBucket = { ...visiblePerBucket, [level]: Math.min((visiblePerBucket[level] ?? PAGE_SIZE) + PAGE_SIZE, total) };
-  }
-  function showAll(level: number, total: number) {
-    visiblePerBucket = { ...visiblePerBucket, [level]: total };
+  function showAllChips(level: number, total: number) {
+    chipLimitPerLevel = { ...chipLimitPerLevel, [level]: total };
   }
 
   const tailResult = $derived(
-    mode === 'tail' && queryFinals.length > 0
-      ? searchByTail(queryFinals, scheme, lexicon, {
-          excludeText: query.trim(),
+    debouncedMode === 'tail' && debouncedFinals.length > 0
+      ? searchByTail(debouncedFinals, scheme, lexicon, {
+          excludeText: debouncedQuery.trim(),
           minTailK: 2,
           maxPerBucket: Number.POSITIVE_INFINITY,
-          toneMode,
-          targetTones: queryTones
+          toneMode: debouncedToneMode,
+          targetTones: debouncedTones
         })
       : null
   );
@@ -326,15 +447,16 @@
     {:else if mode === 'full' && fullResult}
       <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
         {t(
-          `共 ${fullResult.totalHits} 条候选，按宽松级别分层（Level 0 = 全严格匹配；Level k = 第 k 位放宽）：`,
-          `${fullResult.totalHits} candidates, grouped by loosening level (Level 0 = all positions match; Level k = k positions relaxed):`
+          `共 ${fullResult.totalHits} 条候选 · 按尾韵相同聚成一组，点击展开`,
+          `${fullResult.totalHits} candidates, grouped by identical rhyme tail — click to expand`
         )}
       </p>
 
       <div class="space-y-4">
-        {#each fullResult.buckets as bucket (bucket.level)}
-          {@const visible = shownCount(bucket.level)}
-          {@const renderedHits = bucket.hits.slice(0, visible)}
+        {#each fullResult.buckets as bucket, bucketIdx (bucket.level)}
+          {@const groups = groupedFullLevels[bucketIdx] ?? []}
+          {@const limit = chipLimit(bucket.level)}
+          {@const visibleGroups = groups.slice(0, limit)}
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
               <p class="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -348,78 +470,69 @@
                 </span>
               </p>
               <span class="font-mono text-xs text-zinc-500">
-                {#if bucket.hits.length > renderedHits.length}
-                  {renderedHits.length} / {bucket.hits.length} {t('条', 'hits')}
-                {:else}
-                  {bucket.hits.length} {t('条', 'hits')}
-                {/if}
+                {t(
+                  `${groups.length} 种尾韵 · ${bucket.hits.length} 条`,
+                  `${groups.length} tail${groups.length === 1 ? '' : 's'} · ${bucket.hits.length} total`
+                )}
               </span>
             </div>
 
-            <ul class="space-y-2">
-              {#each renderedHits as hit (hit.phrase.text)}
-                {@const winStart = hit.matchOffset}
-                {@const winEnd = winStart + hit.match.perPosition.length}
-                {@const phraseChars = [...hit.phrase.text].filter((ch) => /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch))}
-                <li class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
-                  <div class="mb-1.5 flex items-baseline justify-between gap-3">
-                    <span class="flex-1 text-base font-semibold">
-                      {#each phraseChars as ch, i (i)}
-                        {@const inWindow = i >= winStart && i < winEnd}
-                        {@const matched = inWindow && hit.match.perPosition[i - winStart]}
-                        <span class="{inWindow
-                          ? matched
-                            ? 'text-emerald-700 dark:text-emerald-400 underline decoration-emerald-400/60 decoration-2 underline-offset-4'
-                            : 'text-rose-600 dark:text-rose-400'
-                          : 'text-zinc-500 dark:text-zinc-500'}">{ch}</span>
+            <!-- Group chips -->
+            <ul class="flex flex-wrap gap-1.5">
+              {#each visibleGroups as g (g.tailText + '#' + g.level + g.perPosition.map(b => b ? '1' : '0').join(''))}
+                {@const groupKey = `${bucket.level}::${g.tailText}#${g.perPosition.map(b => b ? '1' : '0').join('')}`}
+                {@const isOpen = expandedGroups.has(groupKey)}
+                <li class="flex flex-col">
+                  <button
+                    class="group flex items-baseline gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition {isOpen
+                      ? 'border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-200'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 hover:border-sky-300 hover:bg-sky-50/50 dark:hover:border-sky-700 dark:hover:bg-sky-950/20'}"
+                    onclick={() => toggleGroup(groupKey)}
+                  >
+                    <!-- Tail text with per-position match coloring -->
+                    <span class="font-sans">
+                      {#each [...g.tailText] as ch, i (i)}
+                        {@const ok = g.perPosition[i]}
+                        <span class="{ok
+                          ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                          : 'text-rose-600 dark:text-rose-400'}">{ch}</span>
                       {/each}
                     </span>
-                    <span class="shrink-0 font-mono text-xs text-zinc-400">
-                      {hit.match.matchedPositions.length}/{hit.match.comparedLength} {t('押', 'rhymed')}{winStart > 0 ? t(' · 句中', ' · mid') : ''}
-                    </span>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-1 font-mono text-xs">
-                    {#each hit.phrase.finals as f, i (i)}
-                      {@const inWindow = i >= winStart && i < winEnd}
-                      {@const matched = inWindow && hit.match.perPosition[i - winStart]}
-                      {@const isHov = hoveredKey !== null && f === hoveredKey}
-                      <span
-                        class="rounded px-1.5 py-0.5 transition-all {matched
-                          ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
-                          : inWindow
-                            ? 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200'
-                            : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500'}
-                          {isHov ? 'ring-2 ring-sky-500 scale-110 z-10' : ''}"
-                      >
-                        {f}
-                      </span>
-                    {/each}
-                    {#if hit.phrase.tags.length > 0}
-                      <span class="ml-auto text-zinc-400">
-                        {hit.phrase.tags.map((tag) => `#${tag}`).join(' ')}
-                      </span>
-                    {/if}
-                  </div>
+                    <span class="font-mono text-[10px] text-zinc-500">{g.hits.length}</span>
+                    <span class="text-zinc-400">{isOpen ? '▾' : '▸'}</span>
+                  </button>
+
+                  {#if isOpen}
+                    <!-- Expanded member list -->
+                    <ul class="mt-1.5 space-y-1 rounded border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2">
+                      {#each g.hits as hit, hi (hit.text)}
+                        <li class="flex items-baseline justify-between gap-2 rounded px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                          <span class="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
+                            {#if hit.phraseLen === g.tailText.length}
+                              {hit.text}
+                            {:else}
+                              <span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(0, hit.matchOffset)}</span><span class="text-emerald-700 dark:text-emerald-400 font-semibold">{hit.text.slice(hit.matchOffset, hit.matchOffset + g.tailText.length)}</span><span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(hit.matchOffset + g.tailText.length)}</span>
+                            {/if}
+                            {#if hit.properNoun}
+                              <span class="ml-1 text-[9px] text-zinc-400">({t('名', 'name')})</span>
+                            {/if}
+                          </span>
+                          <span class="shrink-0 font-mono text-[10px] text-zinc-400">{hit.source.split('-')[0]}</span>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
                 </li>
               {/each}
             </ul>
 
-            {#if bucket.hits.length > renderedHits.length}
-              <div class="mt-3 flex items-center justify-center gap-2">
-                <button
-                  class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onclick={() => loadMore(bucket.level, bucket.hits.length)}
-                >
-                  {t(
-                    `再加载 ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} 条`,
-                    `Load ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} more`
-                  )}
-                </button>
+            {#if groups.length > limit}
+              <div class="mt-3 text-center">
                 <button
                   class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  onclick={() => showAll(bucket.level, bucket.hits.length)}
+                  onclick={() => showAllChips(bucket.level, groups.length)}
                 >
-                  {t(`展开全部 ${bucket.hits.length}`, `Show all ${bucket.hits.length}`)}
+                  {t(`显示全部 ${groups.length} 种尾韵`, `Show all ${groups.length} tails`)}
                 </button>
               </div>
             {/if}
@@ -436,7 +549,7 @@
 
       <div class="space-y-4">
         {#each tailResult.buckets as bucket (bucket.tailK)}
-          {@const visible = shownCount(bucket.tailK)}
+          {@const visible = chipLimit(bucket.tailK)}
           {@const renderedHits = bucket.hits.slice(0, visible)}
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
@@ -488,19 +601,10 @@
             </ul>
 
             {#if bucket.hits.length > renderedHits.length}
-              <div class="mt-3 flex items-center justify-center gap-2">
-                <button
-                  class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onclick={() => loadMore(bucket.tailK, bucket.hits.length)}
-                >
-                  {t(
-                    `再加载 ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} 条`,
-                    `Load ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} more`
-                  )}
-                </button>
+              <div class="mt-3 text-center">
                 <button
                   class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  onclick={() => showAll(bucket.tailK, bucket.hits.length)}
+                  onclick={() => showAllChips(bucket.tailK, bucket.hits.length)}
                 >
                   {t(`展开全部 ${bucket.hits.length}`, `Show all ${bucket.hits.length}`)}
                 </button>
