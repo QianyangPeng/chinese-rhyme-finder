@@ -62,6 +62,197 @@ function sliceTailText(phrase: PhraseRecord, matchOffset: number, windowLen: num
   return chars.slice(matchOffset, matchOffset + windowLen).join('');
 }
 
+// ── Subsequence alignment with "level = query-gaps + interior-gaps" ─────
+//
+// Given a query Q of length N and candidate C of length M, find the
+// alignment that maximizes `2*matches - span` where:
+//   - matches = number of Q positions paired to some C position (in order)
+//   - span = (lastMatchedCandidatePos - firstMatchedCandidatePos + 1)
+//
+// Level = N + span - 2*matches  (or N if matches == 0)
+//
+// Why this formula: it treats every unmatched QUERY position as 1 level
+// of relaxation, AND every INTERIOR gap in the candidate (unmatched
+// positions between first and last matches) as 1 level. This matches
+// user intent: "降维打击 vs 大衣" is Level 2 (2 query chars uncovered);
+// "魔法 vs 罗德马" is Level 1 (gap of '德' inside the span).
+//
+// When `tailPinned` is true (the requireTailMatch=true UI default), we
+// require Q[N-1] and C[M-1] to be matched together. This is guaranteed
+// by the caller pre-filtering via byLastFinalKey[Q's last key].
+//
+// Algorithm: enumerate 2^(N-1) subsets of Q[0..N-2] positions (which
+// extra query chars to try matching), for each subset try each anchor
+// position f in C[0..M-2] as the first match, and greedy-walk forward
+// picking earliest candidate slots. Pick the alignment with max score.
+// Cost: O(2^N * N * M) per candidate — fine for N ≤ 8, M ≤ 20.
+
+export interface AlignmentResult {
+  /** Number of query positions aligned (always ≥ 1 when tailPinned). */
+  readonly matches: number;
+  /** First matched candidate position. -1 iff matches == 0. */
+  readonly firstJ: number;
+  /** Last matched candidate position. -1 iff matches == 0. */
+  readonly lastJ: number;
+  /** Length = lastJ - firstJ + 1. Each entry: did candidate position
+   *  (firstJ + k) participate in the alignment? Used for rendering the
+   *  tail-text span with per-char green/red coloring. */
+  readonly perPosition: readonly boolean[];
+  /** Level = N + span - 2*matches (N if matches == 0). */
+  readonly level: number;
+}
+
+const EMPTY_ALIGNMENT: AlignmentResult = {
+  matches: 0,
+  firstJ: -1,
+  lastJ: -1,
+  perPosition: [],
+  level: 0
+};
+
+export function findBestAlignment(
+  queryKeys: readonly string[],
+  candKeys: readonly string[],
+  tailPinned: boolean
+): AlignmentResult {
+  const N = queryKeys.length;
+  const M = candKeys.length;
+  if (N === 0 || M === 0) {
+    return { ...EMPTY_ALIGNMENT, level: N };
+  }
+
+  // When tail-pinned the caller guarantees keyOf(Q[N-1]) === keyOf(C[M-1]).
+  // We anchor the alignment there. Then enumerate subsets of Q[0..N-2] to
+  // find the best extra matches in C[0..M-2].
+  if (tailPinned) {
+    const qLastKey = queryKeys[N - 1];
+    const cLastKey = candKeys[M - 1];
+    if (!qLastKey || qLastKey !== cLastKey) {
+      // Caller violated precondition; no match.
+      return { ...EMPTY_ALIGNMENT, level: N };
+    }
+    return alignTailPinned(queryKeys, candKeys);
+  }
+
+  // Free alignment (tailPinned=false): enumerate any 2^N subset.
+  return alignFree(queryKeys, candKeys);
+}
+
+function alignTailPinned(queryKeys: readonly string[], candKeys: readonly string[]): AlignmentResult {
+  const N = queryKeys.length;
+  const M = candKeys.length;
+
+  // Best alignment known so far (floor: just the tail match, score 2-1=1).
+  let bestMatches = 1;
+  let bestFirst = M - 1;
+  let bestPositions: number[] = [M - 1];
+  let bestScore = 2 * 1 - 1;
+
+  // Enumerate nonempty subsets of Q[0..N-2]. Empty subset = just tail
+  // match (already the baseline).
+  const preTailN = N - 1;
+  const subsetLimit = preTailN === 0 ? 1 : 1 << preTailN;
+  for (let subset = 1; subset < subsetLimit; subset++) {
+    // Collect query positions in this subset in ascending order.
+    const qPos: number[] = [];
+    for (let i = 0; i < preTailN; i++) {
+      if (subset & (1 << i)) qPos.push(i);
+    }
+    const subsetLen = qPos.length;
+
+    // For each anchor f (first matched position in candidate).
+    for (let f = 0; f < M - 1; f++) {
+      const k0 = candKeys[f];
+      const q0 = queryKeys[qPos[0]];
+      if (!k0 || k0 !== q0) continue;
+      // Greedy: for the remaining subset positions, find earliest next
+      // candidate slot in (previous + 1 .. M-2) with matching key.
+      const matchedPositions: number[] = [f];
+      let cj = f + 1;
+      let ok = true;
+      for (let k = 1; k < subsetLen; k++) {
+        const qk = queryKeys[qPos[k]];
+        if (!qk) { ok = false; break; }
+        while (cj < M - 1 && candKeys[cj] !== qk) cj++;
+        if (cj >= M - 1) { ok = false; break; }
+        matchedPositions.push(cj);
+        cj++;
+      }
+      if (!ok) continue;
+      // Append the tail match.
+      matchedPositions.push(M - 1);
+      const totalMatches = matchedPositions.length;
+      const first = matchedPositions[0];
+      const span = (M - 1) - first + 1;
+      const score = 2 * totalMatches - span;
+      // Tie-break: prefer more matches (richer alignment, same level).
+      if (score > bestScore || (score === bestScore && totalMatches > bestMatches)) {
+        bestScore = score;
+        bestMatches = totalMatches;
+        bestFirst = first;
+        bestPositions = matchedPositions;
+      }
+    }
+  }
+
+  const lastJ = M - 1;
+  const span = lastJ - bestFirst + 1;
+  const perPosition = new Array<boolean>(span).fill(false);
+  for (const j of bestPositions) perPosition[j - bestFirst] = true;
+  const level = N + span - 2 * bestMatches;
+  return { matches: bestMatches, firstJ: bestFirst, lastJ, perPosition, level };
+}
+
+function alignFree(queryKeys: readonly string[], candKeys: readonly string[]): AlignmentResult {
+  const N = queryKeys.length;
+  const M = candKeys.length;
+  let bestMatches = 0;
+  let bestFirst = -1;
+  let bestPositions: number[] = [];
+  let bestScore = 0;
+
+  for (let subset = 1; subset < (1 << N); subset++) {
+    const qPos: number[] = [];
+    for (let i = 0; i < N; i++) if (subset & (1 << i)) qPos.push(i);
+    for (let f = 0; f < M; f++) {
+      const k0 = candKeys[f];
+      const q0 = queryKeys[qPos[0]];
+      if (!k0 || k0 !== q0) continue;
+      const matchedPositions: number[] = [f];
+      let cj = f + 1;
+      let ok = true;
+      for (let k = 1; k < qPos.length; k++) {
+        const qk = queryKeys[qPos[k]];
+        if (!qk) { ok = false; break; }
+        while (cj < M && candKeys[cj] !== qk) cj++;
+        if (cj >= M) { ok = false; break; }
+        matchedPositions.push(cj);
+        cj++;
+      }
+      if (!ok) continue;
+      const totalMatches = matchedPositions.length;
+      const first = matchedPositions[0];
+      const last = matchedPositions[totalMatches - 1];
+      const span = last - first + 1;
+      const score = 2 * totalMatches - span;
+      // Tie-break: prefer more matches (richer alignment, same level).
+      if (score > bestScore || (score === bestScore && totalMatches > bestMatches)) {
+        bestScore = score;
+        bestMatches = totalMatches;
+        bestFirst = first;
+        bestPositions = matchedPositions;
+      }
+    }
+  }
+  if (bestMatches === 0) return { ...EMPTY_ALIGNMENT, level: N };
+  const lastJ = bestPositions[bestPositions.length - 1];
+  const span = lastJ - bestFirst + 1;
+  const perPosition = new Array<boolean>(span).fill(false);
+  for (const j of bestPositions) perPosition[j - bestFirst] = true;
+  const level = N + span - 2 * bestMatches;
+  return { matches: bestMatches, firstJ: bestFirst, lastJ, perPosition, level };
+}
+
 export interface SearchHit {
   /** The matched phrase. */
   readonly phrase: PhraseRecord;
@@ -142,23 +333,30 @@ export function searchByFinals(
   options: SearchOptions = {}
 ): SearchResult {
   const targetLength = target.length;
+  // Under the new "gaps count as relaxations" formula, levels up to
+  // targetLength are what the UI cares about; we keep the bucket map
+  // sparse (not a pre-sized array) so we can accept arbitrary levels.
   const maxLevel = options.maxLevel ?? targetLength;
   const maxPerBucket = options.maxPerBucket ?? DEFAULT_MAX_PER_BUCKET;
   const excludeText = options.excludeText;
   const toneMode: ToneMode = options.toneMode ?? 'none';
   const targetTones = options.targetTones;
   const requireTailMatch = options.requireTailMatch ?? true;
-  const windowMode = options.windowMode ?? 'tail';
+  // Legacy option — no longer used; the new alignment algorithm
+  // discovers optimal match positions automatically regardless of
+  // where the rhyme sits inside a longer candidate.
+  void options.windowMode;
 
-  // Pre-compose target keys with tone info if requested.
   const targetKeys = target.map((f, i) =>
     composeKey(f, (targetTones?.[i] ?? 0) as Tone, scheme, toneMode)
   );
 
-  const buckets: Array<SearchHit[]> = Array.from(
-    { length: targetLength + 1 },
-    () => []
-  );
+  const bucketMap = new Map<number, SearchHit[]>();
+  function pushHit(level: number, hit: SearchHit) {
+    let arr = bucketMap.get(level);
+    if (!arr) { arr = []; bucketMap.set(level, arr); }
+    arr.push(hit);
+  }
 
   if (targetLength === 0) {
     return { targetLength: 0, buckets: [], totalHits: 0 };
@@ -215,8 +413,7 @@ export function searchByFinals(
       if (phraseLastTone !== targetLastTone) continue;
     }
 
-    // Compose this candidate's keys once (reused for window slides on
-    // longer candidates).
+    // Compose this candidate's keys once.
     const candKeys: string[] = new Array(phrase.length);
     for (let i = 0; i < phrase.length; i++) {
       candKeys[i] = composeKey(
@@ -227,74 +424,41 @@ export function searchByFinals(
       );
     }
 
-    // Route to the appropriate comparison based on length.
-    if (phrase.length === targetLength) {
-      // Same-length: straight positional compare.
-      const match = matchFullKeys(targetKeys, candKeys);
-      if (!match) continue;
-      if (match.relaxationLevel > maxLevel) continue;
-      if (requireTailMatch) {
-        const last = match.perPosition.length - 1;
-        if (last >= 0 && !match.perPosition[last]) continue;
-      }
-      buckets[match.relaxationLevel].push({
-        phrase, match, level: match.relaxationLevel, matchOffset: 0,
-        tailText: sliceTailText(phrase, 0, match.perPosition.length)
-      });
-    } else if (phrase.length > targetLength) {
-      // Longer candidate: slide a window of size targetLength.
-      const tailOffset = phrase.length - targetLength;
-      const startOffset = windowMode === 'anywhere' ? 0 : tailOffset;
-      let bestMatch: RhymeMatch | null = null;
-      let bestOffset = -1;
-      for (let off = startOffset; off <= tailOffset; off++) {
-        const window = candKeys.slice(off, off + targetLength);
-        const m = matchFullKeys(targetKeys, window);
-        if (!m) continue;
-        if (m.relaxationLevel > maxLevel) continue;
-        if (requireTailMatch) {
-          const last = m.perPosition.length - 1;
-          if (last >= 0 && !m.perPosition[last]) continue;
-        }
-        if (
-          !bestMatch ||
-          m.relaxationLevel < bestMatch.relaxationLevel ||
-          (m.relaxationLevel === bestMatch.relaxationLevel && off > bestOffset)
-        ) {
-          bestMatch = m;
-          bestOffset = off;
-        }
-      }
-      if (bestMatch) {
-        buckets[bestMatch.relaxationLevel].push({
-          phrase, match: bestMatch, level: bestMatch.relaxationLevel, matchOffset: bestOffset,
-          tailText: sliceTailText(phrase, bestOffset, bestMatch.perPosition.length)
-        });
-      }
-    } else {
-      // Shorter candidate (2 ≤ M < targetLength): compare the full
-      // candidate against target's tail of the same length.
-      const M = phrase.length;
-      if (targetLength < 2) continue;  // can't take a 2-tail out of 1
-      const targetTail = targetKeys.slice(targetLength - M);
-      const match = matchFullKeys(targetTail, candKeys);
-      if (!match) continue;
-      if (match.relaxationLevel > maxLevel) continue;
-      if (requireTailMatch) {
-        const last = match.perPosition.length - 1;
-        if (last >= 0 && !match.perPosition[last]) continue;
-      }
-      buckets[match.relaxationLevel].push({
-        phrase, match, level: match.relaxationLevel, matchOffset: 0,
-        tailText: sliceTailText(phrase, 0, match.perPosition.length)
-      });
+    // Unified alignment: find the best query-to-candidate pairing that
+    // maximizes (2*matches - span). Level = N + span - 2*matches.
+    // Handles same-length / longer / shorter candidates uniformly.
+    const align = findBestAlignment(targetKeys, candKeys, requireTailMatch);
+    if (align.matches === 0) continue;
+    if (align.level > maxLevel) continue;
+
+    // Synthesize a RhymeMatch-shaped object for rendering compatibility.
+    const matchedPositions: number[] = [];
+    for (let i = 0; i < align.perPosition.length; i++) {
+      if (align.perPosition[i]) matchedPositions.push(i);
     }
+    const matchObj: RhymeMatch = {
+      perPosition: align.perPosition,
+      matchedPositions,
+      unmatchedPositions: align.perPosition
+        .map((b, i) => (b ? -1 : i)).filter((x) => x >= 0) as number[],
+      comparedLength: align.perPosition.length,
+      relaxationLevel: align.level,
+      isFullMatch: align.level === 0
+    };
+    pushHit(align.level, {
+      phrase,
+      match: matchObj,
+      level: align.level,
+      matchOffset: align.firstJ,
+      tailText: sliceTailText(phrase, align.firstJ, align.perPosition.length)
+    });
   }
 
   const out: SearchBucket[] = [];
   let totalHits = 0;
-  for (let level = 0; level < buckets.length; level++) {
-    const bucket = buckets[level];
+  const sortedLevels = [...bucketMap.keys()].sort((a, b) => a - b);
+  for (const level of sortedLevels) {
+    const bucket = bucketMap.get(level)!;
     if (bucket.length === 0) continue;
 
     // Sort within a level by a length-tier + POS + quality + text key.

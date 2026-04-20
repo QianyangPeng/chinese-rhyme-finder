@@ -26,6 +26,7 @@ interface SearchOpts {
   toneMode: 'none' | 'exact';
   requireTailMatch: boolean;
   windowMode: 'tail' | 'anywhere';
+  enabledSources?: string[];
 }
 
 type Pending = {
@@ -124,7 +125,8 @@ class SearchClient {
         excludeText: opts.excludeText,
         toneMode: opts.toneMode,
         requireTailMatch: opts.requireTailMatch,
-        windowMode: opts.windowMode
+        windowMode: opts.windowMode,
+        enabledSources: opts.enabledSources
       };
       this.worker!.postMessage(msg);
     });

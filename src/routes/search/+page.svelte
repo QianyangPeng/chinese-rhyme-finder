@@ -12,11 +12,13 @@
   import {
     searchClient,
     type GroupedSearchResult,
-    type TailGroup
+    type TailGroup,
+    type GroupHit
   } from '$lib/workers/searchClient.svelte';
+  import { SOURCES, sourceMeta, SOURCE_IDS_BY_PRIORITY } from '$lib/util/sources';
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
-  import { t } from '$lib/stores/lang.svelte';
+  import { t, lang } from '$lib/stores/lang.svelte';
 
   // ── Query state (URL-synced) ─────────────────────────────────
   let query = $state('降维打击');
@@ -24,6 +26,22 @@
   let requireTailMatch = $state(true);
   let windowMode = $state<'tail' | 'anywhere'>('tail');
   let urlReady = $state(false);
+
+  // Which sources are enabled. Default ALL on; user can toggle.
+  let enabledSources = $state<Record<string, boolean>>(
+    Object.fromEntries(SOURCES.map((s) => [s.id, true]))
+  );
+  // Per-source collapsed state (separate from enable/disable).
+  let collapsedSources = $state<Record<string, boolean>>({});
+  function toggleSourceEnabled(id: string) {
+    enabledSources = { ...enabledSources, [id]: !enabledSources[id] };
+  }
+  function toggleSourceCollapsed(id: string) {
+    collapsedSources = { ...collapsedSources, [id]: !collapsedSources[id] };
+  }
+  const enabledSourceIds = $derived(
+    Object.keys(enabledSources).filter((id) => enabledSources[id])
+  );
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
@@ -74,25 +92,20 @@
   let lastSearchKey = '';
 
   $effect(() => {
-    // Track everything that affects the search — including worker
-    // readiness / phrasesLoaded so the search auto-re-runs as lexicon
-    // chunks stream in. Each re-run is cheap (off-thread) and the
-    // UI updates in place when the final result comes back.
     void query; void toneMode; void requireTailMatch; void windowMode;
     void searchClient.isReady;
     void searchClient.phrasesLoaded;
+    void enabledSourceIds;
 
     const trimmed = query.trim();
     if (!trimmed || queryFinals.length === 0) {
       result = null;
       return;
     }
-    // Don't hit the worker before it has any data — would return empty.
     if (searchClient.phrasesLoaded === 0) return;
 
-    // Include phrasesLoaded in the dedup key so the SAME query fires
-    // again when more phrases stream in.
-    const key = `${trimmed}|${toneMode}|${requireTailMatch ? '1' : '0'}|${windowMode}|${searchClient.phrasesLoaded}`;
+    const sourcesKey = enabledSourceIds.sort().join(',');
+    const key = `${trimmed}|${toneMode}|${requireTailMatch ? '1' : '0'}|${windowMode}|${searchClient.phrasesLoaded}|${sourcesKey}`;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(async () => {
       if (key === lastSearchKey) return;
@@ -105,9 +118,9 @@
           excludeText: trimmed,
           toneMode,
           requireTailMatch,
-          windowMode
+          windowMode,
+          enabledSources: enabledSourceIds
         });
-        // Drop the result if a newer query has already been requested.
         if (key === lastSearchKey) result = r;
       } catch (err) {
         console.error('[search]', err);
@@ -121,25 +134,68 @@
   // Initial chip render cap. 100 chips + their spans = ~700ms re-render
   // stall on modest hardware; 30 makes even re-renders feel instant.
   // "Show all N tails" remains a click away.
-  const LEVEL_CHIP_LIMIT = 30;
+  const SOURCE_CHIP_LIMIT = 30;
   let expandedGroups = $state<Set<string>>(new Set());
-  let chipLimitPerLevel = $state<Record<number, number>>({});
+  let chipLimitPerKey = $state<Record<string, number>>({});
   $effect(() => {
-    // Reset expansion & chip limits when query context changes.
     void query; void toneMode; void requireTailMatch; void windowMode;
     expandedGroups = new Set();
-    chipLimitPerLevel = {};
+    chipLimitPerKey = {};
   });
   function toggleGroup(key: string) {
     const next = new Set(expandedGroups);
     if (next.has(key)) next.delete(key); else next.add(key);
     expandedGroups = next;
   }
-  function chipLimit(level: number): number {
-    return chipLimitPerLevel[level] ?? LEVEL_CHIP_LIMIT;
+  function chipLimit(key: string | number): number {
+    return chipLimitPerKey[String(key)] ?? SOURCE_CHIP_LIMIT;
   }
-  function showAllChips(level: number, total: number) {
-    chipLimitPerLevel = { ...chipLimitPerLevel, [level]: total };
+  function showAllChips(key: string | number, total: number) {
+    chipLimitPerKey = { ...chipLimitPerKey, [String(key)]: total };
+  }
+
+  // ── Source-grouped view helpers ──────────────────────────────
+  interface SourceBucket {
+    sourceId: string;
+    groups: TailGroup[];
+    totalHits: number;
+  }
+
+  /** A tail-group's "primary source" = highest-priority source among
+   *  its hits. The group lives in that source's mini-section. Hits
+   *  from other sources are not dropped — they're rendered under
+   *  their own source (via `hitsInGroupForSource`). */
+  function primarySourceFor(g: TailGroup): string {
+    if (g.hits.length === 0) return 'wiktionary-slang';
+    let bestId = g.hits[0].source;
+    let bestPri = sourceMeta(bestId).priority;
+    for (let i = 1; i < g.hits.length; i++) {
+      const s = g.hits[i].source;
+      const p = sourceMeta(s).priority;
+      if (p < bestPri) { bestPri = p; bestId = s; }
+    }
+    return bestId;
+  }
+
+  function partitionGroupsBySource(groups: readonly TailGroup[]): SourceBucket[] {
+    const byId = new Map<string, TailGroup[]>();
+    for (const g of groups) {
+      const src = primarySourceFor(g);
+      let arr = byId.get(src);
+      if (!arr) { arr = []; byId.set(src, arr); }
+      arr.push(g);
+    }
+    const out: SourceBucket[] = [];
+    for (const [sid, gs] of byId) {
+      const totalHits = gs.reduce((s, g) => s + g.totalCount, 0);
+      out.push({ sourceId: sid, groups: gs, totalHits });
+    }
+    out.sort((a, b) => sourceMeta(a.sourceId).priority - sourceMeta(b.sourceId).priority);
+    return out;
+  }
+
+  function hitsInGroupForSource(g: TailGroup, sourceId: string): GroupHit[] {
+    return g.hits.filter((h) => h.source === sourceId);
   }
 
   function presetExample(q: string) { query = q; }
@@ -209,19 +265,21 @@
       <span>{t('必须押韵', 'must rhyme')}</span>
     </label>
 
-    <span class="ml-4 text-zinc-500">{t('匹配位置：', 'Window:')}</span>
-    <button
-      class="rounded border px-2.5 py-1 text-xs {windowMode === 'tail'
-        ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-      onclick={() => (windowMode = 'tail')}
-    >{t('句末', 'Tail only')}</button>
-    <button
-      class="rounded border px-2.5 py-1 text-xs {windowMode === 'anywhere'
-        ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-      onclick={() => (windowMode = 'anywhere')}
-    >{t('句中+句末', 'Anywhere')}</button>
+  </div>
+
+  <!-- Source toggles -->
+  <div class="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+    <span class="text-zinc-500 mr-1">{t('语料源：', 'Sources:')}</span>
+    {#each SOURCES as src (src.id)}
+      {@const on = enabledSources[src.id]}
+      <button
+        class="rounded px-2 py-1 font-mono text-[10px] transition select-none {on
+          ? `${src.badgeCls} ring-1 ring-current`
+          : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 line-through'}"
+        title={on ? t('点击关闭', 'click to hide') : t('点击打开', 'click to show')}
+        onclick={() => toggleSourceEnabled(src.id)}
+      >{lang.current === 'zh' ? src.zh : src.en}</button>
+    {/each}
   </div>
 
   <!-- Query input -->
@@ -292,15 +350,14 @@
 
       <div class="space-y-4">
         {#each result.levels as levelGroup (levelGroup.level)}
-          {@const limit = chipLimit(levelGroup.level)}
-          {@const visibleGroups = levelGroup.groups.slice(0, limit)}
+          {@const grouped = partitionGroupsBySource(levelGroup.groups)}
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
               <p class="font-semibold text-zinc-800 dark:text-zinc-200">
                 Level {levelGroup.level}
                 <span class="ml-2 font-normal text-zinc-500">
                   {#if levelGroup.level === 0}
-                    {t('全押 · 每个位置都匹配', 'Full rhyme · every position matches')}
+                    {t('全押 · 查询的每个字都押上了', 'Full rhyme · every query char matched')}
                   {:else}
                     {t(`${levelGroup.level} 位放宽`, `${levelGroup.level} position${levelGroup.level === 1 ? '' : 's'} relaxed`)}
                   {/if}
@@ -314,68 +371,106 @@
               </span>
             </div>
 
-            <ul class="flex flex-wrap gap-1.5">
-              {#each visibleGroups as g, gi (g.tailText + '#' + gi)}
-                {@const perKey = g.perPosition.map((b: boolean) => b ? '1' : '0').join('')}
-                {@const groupKey = `${levelGroup.level}::${g.tailText}#${perKey}`}
-                {@const isOpen = expandedGroups.has(groupKey)}
-                <li class="flex flex-col">
-                  <button
-                    class="flex items-baseline gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition {isOpen
-                      ? 'border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-200'
-                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 hover:border-sky-300 hover:bg-sky-50/50 dark:hover:border-sky-700 dark:hover:bg-sky-950/20'}"
-                    onclick={() => toggleGroup(groupKey)}
-                  >
-                    <span class="font-sans">
-                      {#each g.tailChars as ch, i (i)}
-                        {@const ok = g.perPosition[i]}
-                        <span class="{ok
-                          ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                          : 'text-rose-600 dark:text-rose-400'}">{ch}</span>
-                      {/each}
-                    </span>
-                    <span class="font-mono text-[10px] text-zinc-500">{g.totalCount}</span>
-                    <span class="text-zinc-400">{isOpen ? '▾' : '▸'}</span>
-                  </button>
+            <!-- Partition groups by their primary source, then render
+                 one mini-section per source in priority order. -->
+            <div class="space-y-2">
+            {#each grouped as sg (sg.sourceId)}
+              {@const smeta = sourceMeta(sg.sourceId)}
+              {@const isCollapsed = collapsedSources[`${levelGroup.level}::${sg.sourceId}`]}
+              <section class="flex gap-2">
+                <!-- Colored left bar -->
+                <div class="w-1 shrink-0 self-stretch rounded {smeta.barCls}"></div>
+                <div class="flex-1 min-w-0">
+                  <header class="mb-1.5 flex items-baseline justify-between">
+                    <button
+                      class="inline-flex items-baseline gap-1.5 rounded px-1 py-0.5 text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                      onclick={() => toggleSourceCollapsed(`${levelGroup.level}::${sg.sourceId}`)}
+                    >
+                      <span class="text-zinc-400">{isCollapsed ? '▸' : '▾'}</span>
+                      <span class="rounded px-1.5 py-0.5 {smeta.badgeCls}">{lang.current === 'zh' ? smeta.zh : smeta.en}</span>
+                      <span class="font-mono font-normal text-zinc-500">
+                        {t(`${sg.groups.length} 种 · ${sg.totalHits} 条`, `${sg.groups.length} tails · ${sg.totalHits} total`)}
+                      </span>
+                    </button>
+                  </header>
+                  {#if !isCollapsed}
+                    {@const srcKey = `${levelGroup.level}::${sg.sourceId}`}
+                    {@const limit = chipLimit(srcKey)}
+                    {@const visibleGroups = sg.groups.slice(0, limit)}
+                    <ul class="flex flex-wrap gap-1.5">
+                      {#each visibleGroups as g, gi (g.tailText + '#' + gi)}
+                        {@const perKey = g.perPosition.map((b: boolean) => b ? '1' : '0').join('')}
+                        {@const groupKey = `${levelGroup.level}::${sg.sourceId}::${g.tailText}#${perKey}`}
+                        {@const isOpen = expandedGroups.has(groupKey)}
+                        <li class="flex flex-col">
+                          <button
+                            class="flex items-baseline gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition {isOpen
+                              ? 'border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-200'
+                              : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 hover:border-sky-300 hover:bg-sky-50/50 dark:hover:border-sky-700 dark:hover:bg-sky-950/20'}"
+                            onclick={() => toggleGroup(groupKey)}
+                          >
+                            <span class="font-sans">
+                              {#each g.tailChars as ch, i (i)}
+                                {@const ok = g.perPosition[i]}
+                                <span class="{ok
+                                  ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                                  : 'text-rose-600 dark:text-rose-400'}">{ch}</span>
+                              {/each}
+                            </span>
+                            <span class="font-mono text-[10px] text-zinc-500">{g.totalCount}</span>
+                            <span class="text-zinc-400">{isOpen ? '▾' : '▸'}</span>
+                          </button>
 
-                  {#if isOpen}
-                    <ul class="mt-1.5 space-y-1 rounded border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2">
-                      {#each g.hits as hit (hit.text)}
-                        <li class="flex items-baseline justify-between gap-2 rounded px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                          <span class="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
-                            {#if hit.phraseLen === g.tailText.length}
-                              {hit.text}
-                            {:else}
-                              <span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(0, hit.matchOffset)}</span><span class="text-emerald-700 dark:text-emerald-400 font-semibold">{hit.text.slice(hit.matchOffset, hit.matchOffset + g.tailText.length)}</span><span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(hit.matchOffset + g.tailText.length)}</span>
-                            {/if}
-                            {#if hit.properNoun}
-                              <span class="ml-1 text-[9px] text-zinc-400">({t('名', 'name')})</span>
-                            {/if}
-                          </span>
-                          <span class="shrink-0 font-mono text-[10px] text-zinc-400">{hit.source.split('-')[0]}</span>
+                          {#if isOpen}
+                            <ul class="mt-1.5 space-y-1 rounded border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2">
+                              {#each hitsInGroupForSource(g, sg.sourceId) as hit (hit.text)}
+                                {@const hmeta = sourceMeta(hit.source)}
+                                <li class="rounded px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                                  <div class="flex items-baseline justify-between gap-2">
+                                    <span class="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
+                                      {#if hit.phraseLen === g.tailText.length}
+                                        {hit.text}
+                                      {:else}
+                                        <span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(0, hit.matchOffset)}</span><span class="text-emerald-700 dark:text-emerald-400 font-semibold">{hit.text.slice(hit.matchOffset, hit.matchOffset + g.tailText.length)}</span><span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(hit.matchOffset + g.tailText.length)}</span>
+                                      {/if}
+                                      {#if hit.properNoun}
+                                        <span class="ml-1 text-[9px] text-zinc-400">({t('名', 'name')})</span>
+                                      {/if}
+                                    </span>
+                                    <span class="shrink-0 rounded px-1 py-0.5 text-[9px] {hmeta.badgeCls}">
+                                      {lang.current === 'zh' ? hmeta.zh : hmeta.en}
+                                    </span>
+                                  </div>
+                                  {#if hit.pinyin && hit.pinyin.length > 0}
+                                    <p class="mt-0.5 font-mono text-[10px] text-zinc-400">
+                                      {hit.pinyin.join(' ')}
+                                    </p>
+                                  {/if}
+                                </li>
+                              {/each}
+                              {#if g.totalCount > g.hits.length}
+                                <li class="px-1.5 py-1 text-[11px] italic text-zinc-400">
+                                  {t(`…还有 ${g.totalCount - g.hits.length} 条未显示`, `…and ${g.totalCount - g.hits.length} more not shown`)}
+                                </li>
+                              {/if}
+                            </ul>
+                          {/if}
                         </li>
                       {/each}
-                      {#if g.totalCount > g.hits.length}
-                        <li class="px-1.5 py-1 text-[11px] italic text-zinc-400">
-                          {t(`…还有 ${g.totalCount - g.hits.length} 条`, `…and ${g.totalCount - g.hits.length} more`)}
-                        </li>
-                      {/if}
                     </ul>
+                    {#if sg.groups.length > visibleGroups.length}
+                      <button
+                        class="mt-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                        onclick={() => showAllChips(srcKey, sg.groups.length)}
+                      >
+                        {t(`展开全部 ${sg.groups.length} 种`, `Show all ${sg.groups.length} tails`)}
+                      </button>
+                    {/if}
                   {/if}
-                </li>
-              {/each}
-            </ul>
-
-            {#if levelGroup.groups.length > limit}
-              <div class="mt-3 text-center">
-                <button
-                  class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  onclick={() => showAllChips(levelGroup.level, levelGroup.groups.length)}
-                >
-                  {t(`显示全部 ${levelGroup.groups.length} 种尾韵`, `Show all ${levelGroup.groups.length} tails`)}
-                </button>
-              </div>
-            {/if}
+                </div>
+              </section>
+            {/each}
+            </div>
           </div>
         {/each}
       </div>

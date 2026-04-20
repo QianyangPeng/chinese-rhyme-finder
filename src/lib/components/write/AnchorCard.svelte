@@ -15,7 +15,8 @@
   import { searchByFinals } from '$lib/core/corpus';
   import type { Lexicon } from '$lib/core/corpus';
   import type { Anchor, ToneMode } from '$lib/core/write/anchors';
-  import { t } from '$lib/stores/lang.svelte';
+  import { sourceMeta } from '$lib/util/sources';
+  import { t, lang } from '$lib/stores/lang.svelte';
 
   interface Props {
     anchor: Anchor;
@@ -72,7 +73,7 @@
   });
 
   const flatHits = $derived.by(() => {
-    if (!result) return [] as Array<{ text: string; finals: readonly string[]; source: string; quality: number; phraseLen: number; matchOffset: number; perPosition: readonly boolean[]; matched: number; compared: number; level: number }>;
+    if (!result) return [] as Array<{ text: string; finals: readonly string[]; source: string; quality: number; phraseLen: number; matchOffset: number; perPosition: readonly boolean[]; matched: number; compared: number; level: number; pinyin: readonly string[] }>;
     const out = [];
     for (const b of result.buckets) {
       for (const h of b.hits) {
@@ -86,7 +87,8 @@
           perPosition: h.match.perPosition,
           matched: h.match.matchedPositions.length,
           compared: h.match.comparedLength,
-          level: h.level
+          level: h.level,
+          pinyin: h.phrase.pinyinWithTone ?? []
         });
       }
     }
@@ -95,7 +97,13 @@
 
   const totalHits = $derived(flatHits.length);
 
-  // ── Source badge palette (matches other pages) ──
+  // Badge helper: bilingual label from shared sources registry.
+  function badge(src: string) {
+    const m = sourceMeta(src);
+    return { label: lang.current === 'zh' ? m.zh : m.en, cls: m.badgeCls };
+  }
+
+  // (Legacy inline palette kept below for reference; superseded by `badge`.)
   const SOURCE_BADGES: Record<string, { label: string; cls: string }> = {
     'xinhua-idiom':        { label: '成语', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
     'xinhua-xiehouyu':     { label: '歇后', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200' },
@@ -181,7 +189,7 @@
     </p>
     <ul class="space-y-1.5">
       {#each flatHits.slice(0, visibleCount) as hit (hit.text)}
-        {@const badge = sourceBadge(hit.source)}
+        {@const b = badge(hit.source)}
         {@const winStart = hit.matchOffset}
         {@const winEnd = winStart + hit.perPosition.length}
         <li>
@@ -195,15 +203,13 @@
             <div class="flex items-baseline justify-between gap-2">
               <span class="font-sans text-sm font-semibold text-zinc-900 dark:text-zinc-100">{hit.text}</span>
               <span class="flex shrink-0 items-center gap-1">
-                <span class="rounded px-1 py-0.5 font-mono text-[9px] {badge.cls}">{badge.label}</span>
+                <span class="rounded px-1 py-0.5 font-mono text-[9px] {b.cls}">{b.label}</span>
                 <span class="font-mono text-[9px] text-zinc-400">{hit.matched}/{hit.compared}</span>
-                {#if hit.phraseLen < syllables.length}
-                  <span class="rounded bg-lime-100 dark:bg-lime-900/40 px-1 py-0.5 text-[9px] text-lime-900 dark:text-lime-200">{t('尾', 'tail')}</span>
-                {:else if hit.phraseLen > syllables.length}
-                  <span class="rounded bg-purple-100 dark:bg-purple-900/40 px-1 py-0.5 text-[9px] text-purple-900 dark:text-purple-200">{t('含', 'echo')}</span>
-                {/if}
               </span>
             </div>
+            {#if hit.pinyin && hit.pinyin.length > 0}
+              <p class="mt-0.5 font-mono text-[9px] text-zinc-400">{hit.pinyin.join(' ')}</p>
+            {/if}
             <div class="mt-1 flex flex-wrap items-center gap-0.5 font-mono">
               {#each hit.finals as f, pi (pi)}
                 {@const inWindow = pi >= winStart && pi < winEnd}

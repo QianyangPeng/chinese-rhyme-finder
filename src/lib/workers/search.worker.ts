@@ -63,6 +63,8 @@ export interface GroupHit {
   phraseLen: number;
   matchOffset: number;
   finals: string[];
+  /** Pinyin syllables (with tone digit) aligned to the CJK chars of `text`. */
+  pinyin: string[];
   tags: string[];
   properNoun: boolean;
 }
@@ -79,6 +81,9 @@ export type IncomingMessage =
       toneMode: 'none' | 'exact';
       requireTailMatch: boolean;
       windowMode: 'tail' | 'anywhere';
+      /** Optional: only include hits whose source is in this list.
+       *  Omitted or empty = include all. */
+      enabledSources?: string[];
     };
 
 // ── Worker-local state ───────────────────────────────────────────
@@ -224,10 +229,16 @@ function runSearch(msg: Extract<IncomingMessage, { type: 'search' }>): GroupedSe
     windowMode: msg.windowMode
   });
 
+  // Optional per-source filter (applied before grouping to skip work).
+  const enabledSet = msg.enabledSources && msg.enabledSources.length > 0
+    ? new Set(msg.enabledSources)
+    : null;
+
   // Group each bucket by (tailText + perPosition pattern).
   const levels: LevelGroups[] = result.buckets.map((bucket) => {
     const byKey = new Map<string, { g: TailGroup; all: GroupHit[] }>();
     for (const hit of bucket.hits) {
+      if (enabledSet && !enabledSet.has(hit.phrase.source)) continue;
       const tailText = hit.tailText;
       let perKey = '';
       const per = hit.match.perPosition;
@@ -254,6 +265,7 @@ function runSearch(msg: Extract<IncomingMessage, { type: 'search' }>): GroupedSe
         phraseLen: hit.phrase.length,
         matchOffset: hit.matchOffset,
         finals: hit.phrase.finals as string[],
+        pinyin: (hit.phrase.pinyinWithTone ?? []) as string[],
         tags: hit.phrase.tags as string[],
         properNoun: proper
       });
@@ -277,12 +289,16 @@ function runSearch(msg: Extract<IncomingMessage, { type: 'search' }>): GroupedSe
       if (aR !== bR) return aR - bR;
       return a.tailText.localeCompare(b.tailText, 'zh-Hans');
     });
-    return { level: bucket.level, totalHits: bucket.hits.length, groups };
+    // Recount after source filtering.
+    let levelTotal = 0;
+    for (const g of groups) levelTotal += g.totalCount;
+    return { level: bucket.level, totalHits: levelTotal, groups };
   });
+  const filteredTotal = levels.reduce((s, l) => s + l.totalHits, 0);
 
   return {
     targetLength: result.targetLength,
-    totalHits: result.totalHits,
+    totalHits: filteredTotal,
     levels
   };
 }

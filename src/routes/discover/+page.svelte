@@ -110,9 +110,9 @@
     { id: 'lyrics-hiphop',       label: '说唱', defaultOn: true },
     { id: 'lyrics-pop',          label: '歌词', defaultOn: true },
     { id: 'moegirl-acg',         label: 'ACG',  defaultOn: true },
-    { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: false },
-    { id: 'chinese-poetry/song', label: '宋词', defaultOn: false },
-    { id: 'xinhua-xiehouyu',     label: '歇后', defaultOn: false },
+    { id: 'chinese-poetry/tang', label: '唐诗', defaultOn: true },
+    { id: 'chinese-poetry/song', label: '宋词', defaultOn: true },
+    { id: 'xinhua-xiehouyu',     label: '歇后', defaultOn: true },
   ];
   let enabledSources = $state<Record<string, boolean>>(
     Object.fromEntries(SOURCE_TOGGLES.map((s) => [s.id, s.defaultOn]))
@@ -213,7 +213,12 @@
   // (~500KB), render instantly. When user has custom source toggles →
   // fall back to runtime miner with spinner.
 
-  const DEFAULT_ON_SOURCES = new Set(['xinhua-idiom', 'cedict', 'opensubtitles-zh', 'wiktionary-slang', 'lyrics-hiphop', 'lyrics-pop', 'moegirl-acg']);
+  // All sources on by default (matches SOURCE_TOGGLES defaults above).
+  const DEFAULT_ON_SOURCES = new Set([
+    'xinhua-idiom', 'cedict', 'opensubtitles-zh', 'wiktionary-slang',
+    'lyrics-hiphop', 'lyrics-pop', 'moegirl-acg',
+    'chinese-poetry/tang', 'chinese-poetry/song', 'xinhua-xiehouyu'
+  ]);
 
   function isDefaultSourceConfig(): boolean {
     for (const toggle of SOURCE_TOGGLES) {
