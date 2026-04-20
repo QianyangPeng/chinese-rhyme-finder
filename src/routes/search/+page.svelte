@@ -118,7 +118,10 @@
   });
 
   // ── UI state for group expansion / chip limit ────────────────
-  const LEVEL_CHIP_LIMIT = 100;
+  // Initial chip render cap. 100 chips + their spans = ~700ms re-render
+  // stall on modest hardware; 30 makes even re-renders feel instant.
+  // "Show all N tails" remains a click away.
+  const LEVEL_CHIP_LIMIT = 30;
   let expandedGroups = $state<Set<string>>(new Set());
   let chipLimitPerLevel = $state<Record<number, number>>({});
   $effect(() => {
