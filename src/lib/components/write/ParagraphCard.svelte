@@ -75,6 +75,10 @@
     focused: boolean;
     /** 0-based index — picks a color slot for the paragraph bar. */
     index: number;
+    /** 1-based absolute line number for this paragraph's first line.
+     *  Line numbers continue across paragraphs (e.g., if paragraph 1
+     *  has 4 lines, paragraph 2's startLine is 5). */
+    startLine?: number;
 
     onTextChange: (text: string) => void;
     onFocus: () => void;
@@ -87,6 +91,7 @@
     anchors,
     focused,
     index,
+    startLine = 1,
     onTextChange,
     onFocus,
     onManualAnchorsChange,
@@ -187,12 +192,14 @@
       >
         <!-- Header-height spacer -->
         <div style="height: 32px;"></div>
-        <!-- Line numbers. Each row matches the textarea's 28px line-height. -->
+        <!-- Line numbers (continue across paragraphs; startLine is the
+             1-based absolute index of this paragraph's first line).
+             Each row matches the textarea's 28px line-height. -->
         <div class="font-mono text-[10px] text-zinc-400" style="padding-top: 8px;">
           {#each Array(lineCount) as _, i (i)}
             <div
               style="height: 28px; line-height: 28px; text-align: right; padding-right: 6px;"
-            >{i + 1}</div>
+            >{startLine + i}</div>
           {/each}
         </div>
       </div>

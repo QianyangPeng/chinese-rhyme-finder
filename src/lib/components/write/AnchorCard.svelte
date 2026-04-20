@@ -99,16 +99,12 @@
       });
   });
 
-  // ── Source-grouped view helpers (parallel with /search page) ────
-  interface SourceBucket {
-    sourceId: string;
-    groups: TailGroup[];
-    totalHits: number;
-  }
+  // ── Per-chip primary source (for the badge on each tail chip) ───
 
   /** A tail-group's "primary source" = highest-priority source among
-   *  its hits. The chip lives in that source's mini-section; expand
-   *  shows ALL hits in the group (each with its own source badge). */
+   *  its hits. Used here both to drive the chip's badge and to sort
+   *  chips within a level (成语 first, then 词典, …). Expand still
+   *  shows ALL hits in the group regardless of source. */
   function primarySourceFor(g: TailGroup): string {
     if (g.hits.length === 0) return 'wiktionary-slang';
     let bestId = g.hits[0].source;
@@ -121,33 +117,24 @@
     return bestId;
   }
 
-  function partitionGroupsBySource(groups: readonly TailGroup[]): SourceBucket[] {
-    const byId = new Map<string, TailGroup[]>();
-    for (const g of groups) {
-      const src = primarySourceFor(g);
-      let arr = byId.get(src);
-      if (!arr) { arr = []; byId.set(src, arr); }
-      arr.push(g);
-    }
-    const out: SourceBucket[] = [];
-    for (const [sid, gs] of byId) {
-      const totalHits = gs.reduce((s, g) => s + g.totalCount, 0);
-      out.push({ sourceId: sid, groups: gs, totalHits });
-    }
-    out.sort((a, b) => sourceMeta(a.sourceId).priority - sourceMeta(b.sourceId).priority);
-    return out;
+  /** Flat chip ordering: primary source priority asc (curated first),
+   *  then totalCount desc, then tailText lexicographic. Replaces the
+   *  old collapsible source-section UI. */
+  function sortGroupsBySource(groups: readonly TailGroup[]): TailGroup[] {
+    return [...groups].sort((a, b) => {
+      const pa = sourceMeta(primarySourceFor(a)).priority;
+      const pb = sourceMeta(primarySourceFor(b)).priority;
+      if (pa !== pb) return pa - pb;
+      if (a.totalCount !== b.totalCount) return b.totalCount - a.totalCount;
+      return a.tailText.localeCompare(b.tailText, 'zh-Hans');
+    });
   }
 
-  // ── Expansion / collapse state ──────────────────────────────────
+  // ── Per-chip expansion state ────────────────────────────────────
   /** Keyed by `${level}-${tailText}-${perPosition}` */
   let expandedChips = $state<Record<string, boolean>>({});
   function toggleChip(key: string) {
     expandedChips = { ...expandedChips, [key]: !expandedChips[key] };
-  }
-  /** Keyed by `${level}-${sourceId}` */
-  let collapsedSources = $state<Record<string, boolean>>({});
-  function toggleSource(key: string) {
-    collapsedSources = { ...collapsedSources, [key]: !collapsedSources[key] };
   }
 
   // ── Derived summary ─────────────────────────────────────────────
@@ -163,9 +150,38 @@
 
   // ── Rhyme-group colors (shared palette) ─────────────────────────
   const colors = $derived(rhymeColor(anchor.colorIdx));
+
+  // ── Horizontal collapse (spec point 2) ──────────────────────────
+  /** When collapsed, the column shrinks to ~2.5rem so other anchors
+   *  can fit side-by-side without scrolling. Click the narrow strip
+   *  (or the ▾ toggle in the header) to expand. */
+  let collapsed = $state(false);
+  function toggleCollapsed() {
+    collapsed = !collapsed;
+  }
 </script>
 
-<article class="border-b border-zinc-100 dark:border-zinc-800 text-xs">
+{#if collapsed}
+  <!-- Narrow collapsed strip: colored bar + vertical anchor text + expand arrow. -->
+  <!-- svelte-ignore a11y_consider_explicit_label -->
+  <button
+    class="flex h-full min-h-[160px] flex-col items-center gap-2 border-r border-zinc-100 px-1 py-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/60"
+    style="width: 2.5rem; flex-shrink: 0; background: {colors.bg};"
+    onclick={toggleCollapsed}
+    title={t(`展开「${anchor.text}」的候选`, `Expand candidates for ${anchor.text}`)}
+  >
+    <span class="block h-8 w-1 rounded-full" style="background: {colors.border};"></span>
+    <span
+      class="font-sans text-[14px] font-semibold"
+      style="writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 1px;"
+    >{anchor.text}</span>
+    <span class="text-[10px] text-zinc-400">▸</span>
+  </button>
+{:else}
+<article
+  class="flex-shrink-0 border-r border-zinc-100 dark:border-zinc-800 text-xs"
+  style="width: 18rem;"
+>
   <!-- Header: colored left bar + anchor in matching box + pinyin + location + tone toggles + remove -->
   <header
     class="flex items-center justify-between gap-2 px-3 py-2"
@@ -202,6 +218,12 @@
         title={t('韵母 + 声调', 'Rhyme + tone')}
         onclick={() => onToneModeChange('exact')}
       >{t('+调', '+T')}</button>
+      <button
+        class="rounded p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+        title={t('收起这个锚点', 'Collapse')}
+        onclick={toggleCollapsed}
+        aria-label={t('收起这个锚点', 'Collapse')}
+      >◀</button>
       {#if !anchor.auto}
         <button
           class="rounded p-0.5 text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
@@ -250,7 +272,7 @@
 
     <div class="space-y-3">
       {#each result.levels as level (level.level)}
-        {@const sourceBuckets = partitionGroupsBySource(level.groups)}
+        {@const chips = sortGroupsBySource(level.groups)}
         <div>
           <!-- Level header -->
           <div class="mb-1 flex items-baseline justify-between gap-2 text-[10px]">
@@ -261,98 +283,78 @@
             <span class="text-zinc-500">{level.totalHits} {t('条', '')}</span>
           </div>
 
-          <!-- Source sections -->
-          <div class="space-y-1.5">
-            {#each sourceBuckets as sg (sg.sourceId)}
-              {@const meta = sourceMeta(sg.sourceId)}
-              {@const srcKey = `${level.level}-${sg.sourceId}`}
-              {@const isCollapsed = collapsedSources[srcKey]}
-              <section class="rounded border border-zinc-100 dark:border-zinc-800 overflow-hidden bg-white/60 dark:bg-zinc-900/40">
-                <div class="flex items-stretch">
-                  <span class="w-1 {meta.barCls}"></span>
-                  <button
-                    class="flex-1 flex items-baseline gap-1.5 px-2 py-1 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
-                    onclick={() => toggleSource(srcKey)}
-                  >
-                    <span class="text-zinc-400 text-[10px]">{isCollapsed ? '▸' : '▾'}</span>
-                    <span class="rounded px-1 py-0.5 text-[10px] {meta.badgeCls}">
-                      {lang.current === 'zh' ? meta.zh : meta.en}
-                    </span>
-                    <span class="text-[10px] text-zinc-500">
-                      {t(`${sg.groups.length} 种 · ${sg.totalHits} 条`, `${sg.groups.length} · ${sg.totalHits}`)}
-                    </span>
-                  </button>
-                </div>
-
-                {#if !isCollapsed}
-                  <div class="space-y-1 border-t border-zinc-100 dark:border-zinc-800 p-1.5">
-                    {#each sg.groups as g (g.tailText + '#' + g.perPosition.join(','))}
-                      {@const chipKey = `${level.level}-${g.tailText}-${g.perPosition.join(',')}`}
-                      {@const isOpen = expandedChips[chipKey]}
-                      <div>
-                        <button
-                          class="w-full flex items-center justify-between gap-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-1.5 py-1 text-left hover:border-sky-300 dark:hover:border-sky-700"
-                          onclick={() => toggleChip(chipKey)}
-                        >
-                          <span class="flex items-center gap-0.5 font-sans text-[11px]">
-                            {#each g.tailChars as ch, i (i)}
-                              {@const ok = g.perPosition[i]}
-                              <span class={ok
-                                ? 'font-semibold text-emerald-700 dark:text-emerald-400'
-                                : 'text-rose-600 dark:text-rose-400 line-through'}
-                              >{ch}</span>
-                            {/each}
-                          </span>
-                          <span class="flex shrink-0 items-center gap-1 text-[10px]">
-                            <span class="font-mono text-zinc-500">{g.totalCount}</span>
-                            <span class="text-zinc-400">{isOpen ? '▾' : '▸'}</span>
-                          </span>
-                        </button>
-
-                        {#if isOpen}
-                          <ul class="mt-1 space-y-0.5 rounded border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-1">
-                            {#each g.hits as hit (hit.text)}
-                              {@const hmeta = sourceMeta(hit.source)}
-                              <li>
-                                <button
-                                  type="button"
-                                  class="w-full text-left rounded px-1 py-0.5 hover:bg-sky-100 dark:hover:bg-sky-950/40 cursor-pointer"
-                                  onclick={() => onInsertCandidate(hit.text)}
-                                  title={t('点击插入到编辑器', 'Click to insert')}
-                                >
-                                  <div class="flex items-baseline justify-between gap-1">
-                                    <span class="text-[11px] text-zinc-800 dark:text-zinc-200">
-                                      {#if hit.phraseLen === g.tailText.length}
-                                        {hit.text}
-                                      {:else}
-                                        <span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(0, hit.matchOffset)}</span><span class="font-semibold text-emerald-700 dark:text-emerald-400">{hit.text.slice(hit.matchOffset, hit.matchOffset + g.tailText.length)}</span><span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(hit.matchOffset + g.tailText.length)}</span>
-                                      {/if}
-                                      {#if hit.properNoun}
-                                        <span class="ml-1 text-[9px] text-zinc-400">({t('名', 'name')})</span>
-                                      {/if}
-                                    </span>
-                                    <span class="shrink-0 rounded px-1 py-0 text-[9px] {hmeta.badgeCls}">
-                                      {lang.current === 'zh' ? hmeta.zh : hmeta.en}
-                                    </span>
-                                  </div>
-                                  {#if hit.pinyin && hit.pinyin.length > 0}
-                                    <p class="mt-0 font-mono text-[9px] text-zinc-400">{hit.pinyin.join(' ')}</p>
-                                  {/if}
-                                </button>
-                              </li>
-                            {/each}
-                            {#if g.totalCount > g.hits.length}
-                              <li class="px-1 py-0 text-[10px] italic text-zinc-400">
-                                {t(`…还有 ${g.totalCount - g.hits.length} 条`, `…+${g.totalCount - g.hits.length} more`)}
-                              </li>
-                            {/if}
-                          </ul>
-                        {/if}
-                      </div>
+          <!-- Flat chip list, ordered by (primary source priority, count desc).
+               Each chip carries a small source badge on its right so the
+               grouping is preserved visually without a separate section. -->
+          <div class="space-y-1">
+            {#each chips as g (g.tailText + '#' + g.perPosition.join(','))}
+              {@const chipKey = `${level.level}-${g.tailText}-${g.perPosition.join(',')}`}
+              {@const isOpen = expandedChips[chipKey]}
+              {@const pSrc = primarySourceFor(g)}
+              {@const pMeta = sourceMeta(pSrc)}
+              <div>
+                <button
+                  class="w-full flex items-center justify-between gap-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-1.5 py-1 text-left hover:border-sky-300 dark:hover:border-sky-700"
+                  onclick={() => toggleChip(chipKey)}
+                >
+                  <span class="flex items-center gap-0.5 font-sans text-[11px]">
+                    {#each g.tailChars as ch, i (i)}
+                      {@const ok = g.perPosition[i]}
+                      <span class={ok
+                        ? 'font-semibold text-emerald-700 dark:text-emerald-400'
+                        : 'text-rose-600 dark:text-rose-400 line-through'}
+                      >{ch}</span>
                     {/each}
-                  </div>
+                  </span>
+                  <span class="flex shrink-0 items-center gap-1 text-[10px]">
+                    <span class="rounded px-1 py-0 text-[9px] {pMeta.badgeCls}">
+                      {lang.current === 'zh' ? pMeta.zh : pMeta.en}
+                    </span>
+                    <span class="font-mono text-zinc-500">{g.totalCount}</span>
+                    <span class="text-zinc-400">{isOpen ? '▾' : '▸'}</span>
+                  </span>
+                </button>
+
+                {#if isOpen}
+                  <ul class="mt-1 space-y-0.5 rounded border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-1">
+                    {#each g.hits as hit (hit.text)}
+                      {@const hmeta = sourceMeta(hit.source)}
+                      <li>
+                        <button
+                          type="button"
+                          class="w-full text-left rounded px-1 py-0.5 hover:bg-sky-100 dark:hover:bg-sky-950/40 cursor-pointer"
+                          onclick={() => onInsertCandidate(hit.text)}
+                          title={t('点击插入到编辑器', 'Click to insert')}
+                        >
+                          <div class="flex items-baseline justify-between gap-1">
+                            <span class="text-[11px] text-zinc-800 dark:text-zinc-200">
+                              {#if hit.phraseLen === g.tailText.length}
+                                {hit.text}
+                              {:else}
+                                <span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(0, hit.matchOffset)}</span><span class="font-semibold text-emerald-700 dark:text-emerald-400">{hit.text.slice(hit.matchOffset, hit.matchOffset + g.tailText.length)}</span><span class="text-zinc-400 dark:text-zinc-600">{hit.text.slice(hit.matchOffset + g.tailText.length)}</span>
+                              {/if}
+                              {#if hit.properNoun}
+                                <span class="ml-1 text-[9px] text-zinc-400">({t('名', 'name')})</span>
+                              {/if}
+                            </span>
+                            <span class="shrink-0 rounded px-1 py-0 text-[9px] {hmeta.badgeCls}">
+                              {lang.current === 'zh' ? hmeta.zh : hmeta.en}
+                            </span>
+                          </div>
+                          {#if hit.pinyin && hit.pinyin.length > 0}
+                            <p class="mt-0 font-mono text-[9px] text-zinc-400">{hit.pinyin.join(' ')}</p>
+                          {/if}
+                        </button>
+                      </li>
+                    {/each}
+                    {#if g.totalCount > g.hits.length}
+                      <li class="px-1 py-0 text-[10px] italic text-zinc-400">
+                        {t(`…还有 ${g.totalCount - g.hits.length} 条`, `…+${g.totalCount - g.hits.length} more`)}
+                      </li>
+                    {/if}
+                  </ul>
                 {/if}
-              </section>
+              </div>
             {/each}
           </div>
         </div>
@@ -362,3 +364,5 @@
 
   </div><!-- /.body -->
 </article>
+{/if}
+

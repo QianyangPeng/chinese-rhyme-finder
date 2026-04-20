@@ -278,10 +278,32 @@
   const focusedAnchors = $derived(
     focusedParagraphId ? (paragraphAnchors[focusedParagraphId] ?? []) : []
   );
-  const panelAnchors = $derived(focusedAnchors.filter((a) => a.showsPanel));
+  // Anchors shown in the right panel: only the group "reps", and
+  // ordered by their appearance in the paragraph (spec 2026-04-20
+  // addendum §2 — "按文章中的顺序来，而不是添加顺序").
+  const panelAnchors = $derived.by(() => {
+    return focusedAnchors
+      .filter((a) => a.showsPanel)
+      .slice()
+      .sort((a, b) => a.start - b.start);
+  });
   const focusedIndex = $derived(
     focusedParagraphId ? paragraphs.findIndex((p) => p.id === focusedParagraphId) : -1
   );
+
+  // ── Cumulative line numbers across paragraphs ────────────────────
+  // P2 originally numbered each paragraph from 1. Per addendum §3,
+  // line numbers continue: paragraph 2's first line = paragraph 1's
+  // last line + 1.
+  const paragraphStartLines = $derived.by<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    let cum = 1;
+    for (const p of paragraphs) {
+      out[p.id] = cum;
+      cum += Math.max(1, p.text.split('\n').length);
+    }
+    return out;
+  });
 </script>
 
 <svelte:head>
@@ -342,6 +364,7 @@
           anchors={paragraphAnchors[para.id] ?? []}
           focused={focusedParagraphId === para.id}
           index={idx}
+          startLine={paragraphStartLines[para.id] ?? 1}
           onTextChange={(txt) => handleTextChange(para.id, txt)}
           onFocus={() => (focusedParagraphId = para.id)}
           onManualAnchorsChange={(manual) => handleManualAnchorsChange(para.id, manual)}
@@ -373,8 +396,11 @@
               {t(`${panelAnchors.length} 个锚点`, `${panelAnchors.length} anchors`)}
             </span>
           </div>
-          <!-- Anchor sections -->
-          <div>
+          <!-- Anchors side by side, each a column. Panel-width (22rem)
+               fits one expanded column; additional ones scroll
+               horizontally. Clicking a column's ◀ button collapses it
+               to a 2.5rem strip so two or three can coexist. -->
+          <div class="flex overflow-x-auto">
             {#each panelAnchors as anchor (anchor.id)}
               <AnchorCard
                 {anchor}
