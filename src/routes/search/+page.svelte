@@ -74,16 +74,25 @@
   let lastSearchKey = '';
 
   $effect(() => {
-    // Track everything that affects the search.
+    // Track everything that affects the search — including worker
+    // readiness / phrasesLoaded so the search auto-re-runs as lexicon
+    // chunks stream in. Each re-run is cheap (off-thread) and the
+    // UI updates in place when the final result comes back.
     void query; void toneMode; void requireTailMatch; void windowMode;
-    // Only search when corpus is ready AND we have a query.
+    void searchClient.isReady;
+    void searchClient.phrasesLoaded;
+
     const trimmed = query.trim();
     if (!trimmed || queryFinals.length === 0) {
       result = null;
       return;
     }
+    // Don't hit the worker before it has any data — would return empty.
+    if (searchClient.phrasesLoaded === 0) return;
 
-    const key = `${trimmed}|${toneMode}|${requireTailMatch ? '1' : '0'}|${windowMode}`;
+    // Include phrasesLoaded in the dedup key so the SAME query fires
+    // again when more phrases stream in.
+    const key = `${trimmed}|${toneMode}|${requireTailMatch ? '1' : '0'}|${windowMode}|${searchClient.phrasesLoaded}`;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(async () => {
       if (key === lastSearchKey) return;
@@ -106,15 +115,6 @@
         searchInFlight = false;
       }
     }, 150);
-  });
-
-  // Re-run the current query whenever the worker's readiness changes —
-  // in practice this covers: initial "progress" update with some data,
-  // then "ready" with full data. Results update in-place.
-  $effect(() => {
-    void searchClient.isReady;
-    void searchClient.phrasesLoaded;
-    lastSearchKey = ''; // force next effect pass to re-run search
   });
 
   // ── UI state for group expansion / chip limit ────────────────
