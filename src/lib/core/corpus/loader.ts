@@ -279,7 +279,22 @@ export function ensureExtendedLexicon(baseUrl = ''): Promise<Lexicon> {
     // Fetch all files in parallel. Each arrival triggers incremental
     // merge + notify. Smaller files arrive first naturally.
     await Promise.allSettled(files.map((f) => _loadSourceFile(baseUrl, f)));
-    return getCurrentLexicon();
+
+    // CRITICAL: flush any pending debounce and force a final rebuild.
+    //
+    // Without this, the returned Lexicon is a stale reference — its
+    // `phrases` array has grown in place (because _mergeNewPhrases
+    // mutates _allRecords), but its `byLength` index was built when
+    // only the seed was loaded. searchByFinals iterates byLength, so
+    // it would only see 800 phrases out of 804k. (The UI badge reads
+    // .phrases.length which shows the full count, masking the bug.)
+    if (_debounceTimer) {
+      clearTimeout(_debounceTimer);
+      _debounceTimer = null;
+    }
+    const finalLex = _rebuildLexicon();
+    for (const cb of _onUpdateCallbacks) cb(finalLex);
+    return finalLex;
   })();
 
   return _loadPromise;

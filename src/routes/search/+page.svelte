@@ -89,15 +89,11 @@
     mode === 'full' && queryFinals.length > 0
       ? searchByFinals(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
-          // Generous cap — same-length-first sort guarantees short
-          // dictionary words still surface even when there are
-          // thousands of long-phrase candidates at the same level.
-          // 1000 is a safety net against browser jank on very common
-          // patterns like "你好" (n+ao) where unbounded results can
-          // hit 50k+ DOM nodes; with the sort order what gets cut is
-          // the long-phrase tail of low-quality matches that nobody
-          // would scroll through anyway.
-          maxPerBucket: 1000,
+          // No cap — keep all candidates the search finds. The render
+          // layer below uses per-bucket `visibleCount` + "load more" so
+          // we don't mount tens of thousands of DOM nodes at once on
+          // very common patterns. Users see unlimited results on demand.
+          maxPerBucket: Number.POSITIVE_INFINITY,
           toneMode,
           targetTones: queryTones,
           requireTailMatch,
@@ -116,12 +112,33 @@
   }
   function clearHover() { hoveredKey = null; }
 
+  // ── Progressive disclosure ────────────────────────────────────────
+  // Search returns unbounded hits per bucket; render layer caps mount
+  // at PAGE_SIZE per bucket, expand on button click. Keeps the DOM
+  // light on very common queries while preserving all results.
+  const PAGE_SIZE = 100;
+  let visiblePerBucket = $state<Record<number, number>>({});
+  // Reset visible counts when query / mode / scheme changes.
+  $effect(() => {
+    void query; void mode; void toneMode; void requireTailMatch; void windowMode;
+    visiblePerBucket = {};
+  });
+  function shownCount(level: number): number {
+    return visiblePerBucket[level] ?? PAGE_SIZE;
+  }
+  function loadMore(level: number, total: number) {
+    visiblePerBucket = { ...visiblePerBucket, [level]: Math.min((visiblePerBucket[level] ?? PAGE_SIZE) + PAGE_SIZE, total) };
+  }
+  function showAll(level: number, total: number) {
+    visiblePerBucket = { ...visiblePerBucket, [level]: total };
+  }
+
   const tailResult = $derived(
     mode === 'tail' && queryFinals.length > 0
       ? searchByTail(queryFinals, scheme, lexicon, {
           excludeText: query.trim(),
           minTailK: 2,
-          maxPerBucket: 1000,
+          maxPerBucket: Number.POSITIVE_INFINITY,
           toneMode,
           targetTones: queryTones
         })
@@ -316,6 +333,8 @@
 
       <div class="space-y-4">
         {#each fullResult.buckets as bucket (bucket.level)}
+          {@const visible = shownCount(bucket.level)}
+          {@const renderedHits = bucket.hits.slice(0, visible)}
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
               <p class="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -329,12 +348,16 @@
                 </span>
               </p>
               <span class="font-mono text-xs text-zinc-500">
-                {bucket.hits.length} {t('条', 'hits')}
+                {#if bucket.hits.length > renderedHits.length}
+                  {renderedHits.length} / {bucket.hits.length} {t('条', 'hits')}
+                {:else}
+                  {bucket.hits.length} {t('条', 'hits')}
+                {/if}
               </span>
             </div>
 
             <ul class="space-y-2">
-              {#each bucket.hits as hit (hit.phrase.text)}
+              {#each renderedHits as hit (hit.phrase.text)}
                 {@const winStart = hit.matchOffset}
                 {@const winEnd = winStart + hit.match.perPosition.length}
                 {@const phraseChars = [...hit.phrase.text].filter((ch) => /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch))}
@@ -380,6 +403,26 @@
                 </li>
               {/each}
             </ul>
+
+            {#if bucket.hits.length > renderedHits.length}
+              <div class="mt-3 flex items-center justify-center gap-2">
+                <button
+                  class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  onclick={() => loadMore(bucket.level, bucket.hits.length)}
+                >
+                  {t(
+                    `再加载 ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} 条`,
+                    `Load ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} more`
+                  )}
+                </button>
+                <button
+                  class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  onclick={() => showAll(bucket.level, bucket.hits.length)}
+                >
+                  {t(`展开全部 ${bucket.hits.length}`, `Show all ${bucket.hits.length}`)}
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
@@ -393,6 +436,8 @@
 
       <div class="space-y-4">
         {#each tailResult.buckets as bucket (bucket.tailK)}
+          {@const visible = shownCount(bucket.tailK)}
+          {@const renderedHits = bucket.hits.slice(0, visible)}
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
             <div class="mb-3 flex items-baseline justify-between">
               <p class="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -400,12 +445,16 @@
                 <span class="ml-2 font-normal text-zinc-500">{t(`末尾 ${bucket.tailK} 个音节完全押`, `last ${bucket.tailK} syllables all rhyme`)}</span>
               </p>
               <span class="font-mono text-xs text-zinc-500">
-                {bucket.hits.length} {t('条', 'hits')}
+                {#if bucket.hits.length > renderedHits.length}
+                  {renderedHits.length} / {bucket.hits.length} {t('条', 'hits')}
+                {:else}
+                  {bucket.hits.length} {t('条', 'hits')}
+                {/if}
               </span>
             </div>
 
             <ul class="space-y-2">
-              {#each bucket.hits as hit (hit.phrase.text)}
+              {#each renderedHits as hit (hit.phrase.text)}
                 <li class="rounded border border-zinc-100 dark:border-zinc-800 p-3">
                   <div class="mb-1.5 flex items-baseline justify-between">
                     <span class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
@@ -437,6 +486,26 @@
                 </li>
               {/each}
             </ul>
+
+            {#if bucket.hits.length > renderedHits.length}
+              <div class="mt-3 flex items-center justify-center gap-2">
+                <button
+                  class="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  onclick={() => loadMore(bucket.tailK, bucket.hits.length)}
+                >
+                  {t(
+                    `再加载 ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} 条`,
+                    `Load ${Math.min(PAGE_SIZE, bucket.hits.length - renderedHits.length)} more`
+                  )}
+                </button>
+                <button
+                  class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  onclick={() => showAll(bucket.tailK, bucket.hits.length)}
+                >
+                  {t(`展开全部 ${bucket.hits.length}`, `Show all ${bucket.hits.length}`)}
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
