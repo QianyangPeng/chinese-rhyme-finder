@@ -54,3 +54,6 @@ scripts/.cache/
 
 # Vite cache
 .vite/
+
+# Superpowers brainstorming mockups (local-only, per-session)
+.superpowers/
