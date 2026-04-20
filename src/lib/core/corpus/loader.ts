@@ -250,21 +250,34 @@ function _mergeNewPhrases(phrases: PhraseRecord[]): void {
 }
 
 /**
- * Start loading all source files in parallel. Each file that arrives
- * triggers a merge + rebuild + notify cycle. Pages call `onLexiconUpdate`
- * to register for incremental notifications.
- *
- * Debounces rebuilds: if multiple sources arrive within 200ms, only
- * one rebuild fires.
+ * Start loading all source files in parallel. Each arrival merges its
+ * phrases into the indexes. Subscriber callbacks (`onLexiconUpdate`)
+ * fire at most every `THROTTLE_MS` during load and once more at the
+ * very end with the final lexicon. Aggressive throttling prevents
+ * the expensive downstream work (search + group + render) from
+ * running dozens of times during a multi-file streaming load.
  */
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastNotifyMs = 0;
+/** During load, only fire subscriber callbacks at most every 2.5s.
+ *  That's still 5-6 progressive updates on a typical 15s load, plus
+ *  one final update when everything's in. Keeps the UI responsive
+ *  by leaving breathing room between expensive search+render cycles. */
+const NOTIFY_THROTTLE_MS = 2500;
 
 function _notifyUpdate(): void {
+  const now = Date.now();
+  const sinceLast = now - _lastNotifyMs;
   if (_debounceTimer) clearTimeout(_debounceTimer);
+  // If we notified recently, delay the next fire. Otherwise fire soon.
+  const delay = sinceLast < NOTIFY_THROTTLE_MS
+    ? NOTIFY_THROTTLE_MS - sinceLast
+    : 200;
   _debounceTimer = setTimeout(() => {
+    _lastNotifyMs = Date.now();
     const lex = _rebuildLexicon();
     for (const cb of _onUpdateCallbacks) cb(lex);
-  }, 200);
+  }, delay);
 }
 
 /** Fetch + merge a single source file. */

@@ -149,6 +149,7 @@
 
   interface TailGroup {
     tailText: string;                // e.g. "了吗"
+    tailChars: string[];             // precomputed [...tailText] for render speed
     level: number;                   // relaxation level of its hits
     perPosition: readonly boolean[]; // same for all hits in the group
     hits: Array<{
@@ -186,6 +187,7 @@
         if (!g) {
           g = {
             tailText,
+            tailChars: [...tailText],
             level: bucket.level,
             perPosition: per,
             hits: [],
@@ -241,7 +243,8 @@
   }
 
   // Within each level, only mount the first N chips by default.
-  const LEVEL_CHIP_LIMIT = 300;
+  // Bigger than 100 slows down weak hardware; users can "Show all" on demand.
+  const LEVEL_CHIP_LIMIT = 100;
   let chipLimitPerLevel = $state<Record<number, number>>({});
   $effect(() => {
     void query; void mode; void toneMode; void requireTailMatch; void windowMode;
@@ -491,7 +494,7 @@
                   >
                     <!-- Tail text with per-position match coloring -->
                     <span class="font-sans">
-                      {#each [...g.tailText] as ch, i (i)}
+                      {#each g.tailChars as ch, i (i)}
                         {@const ok = g.perPosition[i]}
                         <span class="{ok
                           ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
