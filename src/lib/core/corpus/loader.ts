@@ -14,6 +14,7 @@ import { parseSyllables } from '../pinyin/parser.js';
 import { strictScheme } from '../rhyme/schemes/strict.js';
 import type { Lexicon, PhraseRecord } from './types.js';
 import { SEED_PHRASES, type SeedPhrase } from './seed-data.js';
+import { sourceMeta } from '../../util/sources.js';
 
 /** Build the per-phrase indexes used by search: byLength + byLastFinalKey.
  *  Extracted so both `buildLexicon` (seed path) and `lexiconFromRecords`
@@ -204,7 +205,10 @@ const FALLBACK_SOURCE_FILES = [
 ];
 
 let _allRecords: PhraseRecord[] = [];
-let _seenTexts = new Set<string>();
+/** text → id in _allRecords. Replaces the old `_seenTexts` Set so a
+ *  duplicate text can UPGRADE its record to a higher-priority source
+ *  (e.g. cedict beats lyrics-hiphop) regardless of file-fetch order. */
+let _textToId = new Map<string, number>();
 /** Indexes are maintained incrementally in `_mergeNewPhrases` so the
  *  lexicon "rebuild" is O(1) (just packages references into a new
  *  Lexicon object) — critical during streaming load where files arrive
@@ -230,21 +234,33 @@ function _rebuildLexicon(): Lexicon {
 
 function _mergeNewPhrases(phrases: PhraseRecord[]): void {
   for (const p of phrases) {
-    if (_seenTexts.has(p.text)) continue;
-    _seenTexts.add(p.text);
-    const id = _allRecords.length;
-    _allRecords.push(p);
-    // Keep indexes in sync as we go — avoids the full-rebuild cost.
-    let lb = _byLength.get(p.length);
-    if (!lb) { lb = []; _byLength.set(p.length, lb); }
-    lb.push(id);
-    if (p.finals.length > 0) {
-      const lastKey = strictScheme.keyOf(p.finals[p.finals.length - 1]);
-      if (lastKey) {
-        let kb = _byLastFinalKey.get(lastKey);
-        if (!kb) { kb = []; _byLastFinalKey.set(lastKey, kb); }
-        kb.push(id);
+    const existingId = _textToId.get(p.text);
+    if (existingId === undefined) {
+      const id = _allRecords.length;
+      _allRecords.push(p);
+      _textToId.set(p.text, id);
+      // Keep indexes in sync as we go — avoids the full-rebuild cost.
+      let lb = _byLength.get(p.length);
+      if (!lb) { lb = []; _byLength.set(p.length, lb); }
+      lb.push(id);
+      if (p.finals.length > 0) {
+        const lastKey = strictScheme.keyOf(p.finals[p.finals.length - 1]);
+        if (lastKey) {
+          let kb = _byLastFinalKey.get(lastKey);
+          if (!kb) { kb = []; _byLastFinalKey.set(lastKey, kb); }
+          kb.push(id);
+        }
       }
+      continue;
+    }
+    // Duplicate text — upgrade to higher-priority source if needed.
+    // Indexes stay valid: same text → same finals → same last-key and
+    // same byLength bucket; only source/quality/tags/segments differ.
+    const existing = _allRecords[existingId];
+    const existingPri = sourceMeta(existing.source).priority;
+    const newPri = sourceMeta(p.source).priority;
+    if (newPri < existingPri) {
+      _allRecords[existingId] = p;
     }
   }
 }

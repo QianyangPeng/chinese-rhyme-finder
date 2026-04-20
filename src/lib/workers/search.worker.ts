@@ -21,6 +21,7 @@
 import { searchByFinals } from '$lib/core/corpus/search';
 import { strictScheme } from '$lib/core/rhyme/schemes/strict';
 import type { Lexicon, PhraseRecord } from '$lib/core/corpus/types';
+import { sourceMeta } from '$lib/util/sources';
 
 // ── Outgoing message shapes ──────────────────────────────────────
 export type WorkerMessage =
@@ -96,7 +97,10 @@ export type IncomingMessage =
 
 // ── Worker-local state ───────────────────────────────────────────
 const _allRecords: PhraseRecord[] = [];
-const _seenTexts = new Set<string>();
+/** text → id in _allRecords. Replaces the old _seenTexts Set so a
+ *  duplicate text can UPGRADE the record to a higher-priority source
+ *  (e.g. cedict beats lyrics-hiphop) regardless of file-fetch order. */
+const _textToId = new Map<string, number>();
 const _byLength = new Map<number, number[]>();
 const _byLastFinalKey = new Map<string, number[]>();
 
@@ -111,22 +115,35 @@ function currentLexicon(): Lexicon {
 
 function mergePhrases(phrases: PhraseRecord[]): void {
   for (const p of phrases) {
-    if (_seenTexts.has(p.text)) continue;
-    _seenTexts.add(p.text);
-    const id = _allRecords.length;
-    _allRecords.push(p);
-    // byLength
-    let lb = _byLength.get(p.length);
-    if (!lb) { lb = []; _byLength.set(p.length, lb); }
-    lb.push(id);
-    // byLastFinalKey
-    if (p.finals.length > 0) {
-      const lastKey = strictScheme.keyOf(p.finals[p.finals.length - 1]);
-      if (lastKey) {
-        let kb = _byLastFinalKey.get(lastKey);
-        if (!kb) { kb = []; _byLastFinalKey.set(lastKey, kb); }
-        kb.push(id);
+    const existingId = _textToId.get(p.text);
+    if (existingId === undefined) {
+      // New text — append + index.
+      const id = _allRecords.length;
+      _allRecords.push(p);
+      _textToId.set(p.text, id);
+      // byLength
+      let lb = _byLength.get(p.length);
+      if (!lb) { lb = []; _byLength.set(p.length, lb); }
+      lb.push(id);
+      // byLastFinalKey
+      if (p.finals.length > 0) {
+        const lastKey = strictScheme.keyOf(p.finals[p.finals.length - 1]);
+        if (lastKey) {
+          let kb = _byLastFinalKey.get(lastKey);
+          if (!kb) { kb = []; _byLastFinalKey.set(lastKey, kb); }
+          kb.push(id);
+        }
       }
+      continue;
+    }
+    // Duplicate text — upgrade to higher-priority source if needed.
+    // Indexes don't change: same text → same finals → same last-key →
+    // same byLength bucket, only source/quality/tags/segments differ.
+    const existing = _allRecords[existingId];
+    const existingPri = sourceMeta(existing.source).priority;
+    const newPri = sourceMeta(p.source).priority;
+    if (newPri < existingPri) {
+      _allRecords[existingId] = p;
     }
   }
 }
