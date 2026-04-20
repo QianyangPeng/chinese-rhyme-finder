@@ -29,9 +29,12 @@
     return new Date(ms).toLocaleDateString();
   }
 
-  function preview(content: string): string {
-    const line = content.split('\n').find((l) => l.trim()) ?? '';
-    return line.length > 24 ? line.slice(0, 24) + '…' : line;
+  function preview(d: Draft): string {
+    for (const p of d.paragraphs) {
+      const line = p.text.split('\n').find((l) => l.trim()) ?? '';
+      if (line) return line.length > 24 ? line.slice(0, 24) + '…' : line;
+    }
+    return '';
   }
 
   function startRename(draft: Draft) {
@@ -40,7 +43,7 @@
   }
   function commitRename() {
     if (!renamingId) return;
-    drafts.update(renamingId, { title: renameText.trim() || '未命名草稿' });
+    drafts.rename(renamingId, renameText.trim() || '未命名草稿');
     renamingId = null;
   }
   function cancelRename() { renamingId = null; }
@@ -116,7 +119,7 @@
                   />
                 {:else}
                   <p class="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{d.title}</p>
-                  <p class="truncate text-xs text-zinc-500">{preview(d.content) || t('（空）', '(empty)')}</p>
+                  <p class="truncate text-xs text-zinc-500">{preview(d) || t('（空）', '(empty)')}</p>
                   <p class="mt-0.5 font-mono text-[10px] text-zinc-400">{formatTime(d.updatedAt)}</p>
                 {/if}
               </div>

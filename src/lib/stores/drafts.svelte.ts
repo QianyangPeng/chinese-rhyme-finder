@@ -1,60 +1,62 @@
 /**
- * Drafts store for the /write page.
+ * Drafts store (v2) for the /write page — paragraph + anchor model.
  *
- * Persists a list of user drafts in localStorage. Each draft is a full
- * snapshot of editor content + scheme config. One draft is "current"
- * at any time — that's what the editor is bound to.
+ * Breaking change vs v1: schemes/depth/global toneMode are gone.
+ * Each draft is a list of paragraphs; each paragraph has its own
+ * text + anchors (auto-detected tail-word anchors + user-picked
+ * selection anchors). Anchors carry their own per-item tone mode.
  *
- * Capped at MAX_DRAFTS; when full, the oldest (smallest updatedAt)
- * gets evicted on create. Auto-save is handled in the page (not here)
- * so the store stays a pure CRUD layer.
+ * v1 drafts are discarded on first load (new storage key).
  */
 
-import type { SchemeConfig } from '$lib/core/write/scheme';
+import type { Anchor } from '$lib/core/write/anchors';
+
+export interface Paragraph {
+  id: string;
+  text: string;
+  /** Manual (user-selected) anchors. Auto anchors are re-detected
+   *  from `text` and merged in at render time — we don't persist them
+   *  because they're a pure derivative of text. */
+  manualAnchors: Anchor[];
+}
 
 export interface Draft {
   id: string;
   title: string;
-  content: string;
-  scheme: SchemeConfig;
+  paragraphs: Paragraph[];
   createdAt: number;
   updatedAt: number;
 }
 
-const STORAGE_KEY = 'rhyme-finder.drafts.v1';
+const STORAGE_KEY = 'rhyme-finder.drafts.v2';
 const MAX_DRAFTS = 20;
 
-const DEFAULT_SCHEME: SchemeConfig = {
-  type: 'free',
-  depth: 2,
-  toneMode: 'none'
-};
-
-function genId(): string {
+function uid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    try { return crypto.randomUUID(); } catch { /* fallthrough */ }
+    try { return crypto.randomUUID(); } catch { /* fall */ }
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Auto-generate a title from content — first 12 Chinese/English chars, or a fallback. */
-function autoTitle(content: string): string {
-  const firstLine = content.split('\n').find((l) => l.trim().length > 0) ?? '';
-  const trimmed = firstLine.trim().slice(0, 12);
-  return trimmed || '未命名草稿';
+function autoTitle(paragraphs: readonly Paragraph[]): string {
+  for (const p of paragraphs) {
+    const firstLine = p.text.split('\n').find((l) => l.trim()) ?? '';
+    const trimmed = firstLine.trim().slice(0, 14);
+    if (trimmed) return trimmed;
+  }
+  return '未命名草稿';
+}
+
+function emptyParagraph(): Paragraph {
+  return { id: uid(), text: '', manualAnchors: [] };
 }
 
 class DraftsStore {
-  /** All drafts in no particular order (sorted at read time). */
   drafts = $state<Draft[]>([]);
-  /** ID of the draft currently open in the editor. */
   currentId = $state<string | null>(null);
 
   constructor() {
-    if (typeof localStorage === 'undefined') {
-      // SSR: leave empty; the /write page will seed a first draft on mount.
-      return;
-    }
+    if (typeof localStorage === 'undefined') return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -67,10 +69,8 @@ class DraftsStore {
         }
       }
     } catch {
-      // corrupt storage — start fresh
+      // corrupt or v1 → start fresh
     }
-
-    // If we loaded drafts but no current, pick the most recently updated.
     if (this.drafts.length > 0 && !this.drafts.find((d) => d.id === this.currentId)) {
       const sorted = [...this.drafts].sort((a, b) => b.updatedAt - a.updatedAt);
       this.currentId = sorted[0].id;
@@ -85,36 +85,32 @@ class DraftsStore {
         JSON.stringify({ drafts: this.drafts, currentId: this.currentId })
       );
     } catch {
-      // storage full / disabled — fail silently
+      // storage full — fail silently
     }
   }
 
-  /** Sorted view, newest-updated first. Derived so UI can iterate. */
   get sorted(): Draft[] {
     return [...this.drafts].sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  /** The active draft, or null. */
   get current(): Draft | null {
     if (!this.currentId) return null;
     return this.drafts.find((d) => d.id === this.currentId) ?? null;
   }
 
-  /** Create a new empty draft, switch to it, persist. */
-  create(scheme: SchemeConfig = DEFAULT_SCHEME): Draft {
+  create(): Draft {
     const now = Date.now();
     const draft: Draft = {
-      id: genId(),
+      id: uid(),
       title: '未命名草稿',
-      content: '',
-      scheme,
+      paragraphs: [emptyParagraph()],
       createdAt: now,
       updatedAt: now
     };
     let next = [...this.drafts, draft];
     if (next.length > MAX_DRAFTS) {
-      // Evict oldest (by updatedAt), but never the one we just made.
       next = [...next].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_DRAFTS);
+      if (!next.find((d) => d.id === draft.id)) next.push(draft);
     }
     this.drafts = next;
     this.currentId = draft.id;
@@ -122,37 +118,12 @@ class DraftsStore {
     return draft;
   }
 
-  /** Update the current draft's content / scheme / title. `patch` may include
-   *  any subset. updatedAt is bumped automatically.
-   *  Also auto-updates title if it's still the default and content changed. */
-  update(id: string, patch: Partial<Pick<Draft, 'title' | 'content' | 'scheme'>>): void {
-    const idx = this.drafts.findIndex((d) => d.id === id);
-    if (idx < 0) return;
-    const prev = this.drafts[idx];
-    const titleWasAuto = prev.title === '未命名草稿' || prev.title === autoTitle(prev.content);
-    const nextContent = patch.content ?? prev.content;
-    const next: Draft = {
-      ...prev,
-      ...patch,
-      // If title wasn't user-customized, re-derive it from the new content.
-      title: patch.title ?? (titleWasAuto ? autoTitle(nextContent) : prev.title),
-      updatedAt: Date.now()
-    };
-    const arr = [...this.drafts];
-    arr[idx] = next;
-    this.drafts = arr;
-    this.persist();
-  }
-
-  /** Switch the currently active draft. */
   setCurrent(id: string): void {
     if (!this.drafts.find((d) => d.id === id)) return;
     this.currentId = id;
     this.persist();
   }
 
-  /** Delete a draft. If it was current, switch to the newest remaining
-   *  (or null if we're now empty). */
   remove(id: string): void {
     const remaining = this.drafts.filter((d) => d.id !== id);
     this.drafts = remaining;
@@ -164,10 +135,85 @@ class DraftsStore {
     this.persist();
   }
 
-  /** Replace the whole in-memory state. Used by import/clear flows. */
-  _reset(): void {
-    this.drafts = [];
-    this.currentId = null;
+  rename(id: string, title: string): void {
+    const idx = this.drafts.findIndex((d) => d.id === id);
+    if (idx < 0) return;
+    const arr = [...this.drafts];
+    arr[idx] = { ...arr[idx], title: title.trim() || '未命名草稿', updatedAt: Date.now() };
+    this.drafts = arr;
+    this.persist();
+  }
+
+  /** Update the paragraphs wholesale. Title auto-derives if it's still
+   *  the default. */
+  setParagraphs(id: string, paragraphs: Paragraph[]): void {
+    const idx = this.drafts.findIndex((d) => d.id === id);
+    if (idx < 0) return;
+    const prev = this.drafts[idx];
+    const wasAuto = prev.title === '未命名草稿' || prev.title === autoTitle(prev.paragraphs);
+    const arr = [...this.drafts];
+    arr[idx] = {
+      ...prev,
+      paragraphs,
+      title: wasAuto ? autoTitle(paragraphs) : prev.title,
+      updatedAt: Date.now()
+    };
+    this.drafts = arr;
+    this.persist();
+  }
+
+  // ── Paragraph-level operations ────────────────────────────────
+  addParagraph(draftId: string): string {
+    const idx = this.drafts.findIndex((d) => d.id === draftId);
+    if (idx < 0) return '';
+    const p = emptyParagraph();
+    const arr = [...this.drafts];
+    arr[idx] = { ...arr[idx], paragraphs: [...arr[idx].paragraphs, p], updatedAt: Date.now() };
+    this.drafts = arr;
+    this.persist();
+    return p.id;
+  }
+
+  removeParagraph(draftId: string, paragraphId: string): void {
+    const idx = this.drafts.findIndex((d) => d.id === draftId);
+    if (idx < 0) return;
+    const d = this.drafts[idx];
+    if (d.paragraphs.length <= 1) {
+      // Last paragraph — just clear it rather than delete.
+      this.updateParagraph(draftId, paragraphId, { text: '', manualAnchors: [] });
+      return;
+    }
+    const arr = [...this.drafts];
+    arr[idx] = {
+      ...d,
+      paragraphs: d.paragraphs.filter((p) => p.id !== paragraphId),
+      updatedAt: Date.now()
+    };
+    this.drafts = arr;
+    this.persist();
+  }
+
+  updateParagraph(
+    draftId: string,
+    paragraphId: string,
+    patch: Partial<Pick<Paragraph, 'text' | 'manualAnchors'>>
+  ): void {
+    const idx = this.drafts.findIndex((d) => d.id === draftId);
+    if (idx < 0) return;
+    const d = this.drafts[idx];
+    const pidx = d.paragraphs.findIndex((p) => p.id === paragraphId);
+    if (pidx < 0) return;
+    const newParagraphs = [...d.paragraphs];
+    newParagraphs[pidx] = { ...newParagraphs[pidx], ...patch };
+    const wasAuto = d.title === '未命名草稿' || d.title === autoTitle(d.paragraphs);
+    const arr = [...this.drafts];
+    arr[idx] = {
+      ...d,
+      paragraphs: newParagraphs,
+      title: wasAuto ? autoTitle(newParagraphs) : d.title,
+      updatedAt: Date.now()
+    };
+    this.drafts = arr;
     this.persist();
   }
 }
@@ -178,13 +224,12 @@ function isValidDraft(d: unknown): d is Draft {
   return (
     typeof x.id === 'string' &&
     typeof x.title === 'string' &&
-    typeof x.content === 'string' &&
+    Array.isArray(x.paragraphs) &&
+    x.paragraphs.every(
+      (p) => p && typeof p.id === 'string' && typeof p.text === 'string' && Array.isArray(p.manualAnchors)
+    ) &&
     typeof x.createdAt === 'number' &&
-    typeof x.updatedAt === 'number' &&
-    !!x.scheme &&
-    typeof x.scheme.type === 'string' &&
-    typeof x.scheme.depth === 'number' &&
-    typeof x.scheme.toneMode === 'string'
+    typeof x.updatedAt === 'number'
   );
 }
 

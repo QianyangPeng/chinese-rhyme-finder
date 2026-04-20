@@ -1,299 +1,235 @@
 <script lang="ts">
   /**
-   * 押韵集 · /write — the writing workspace.
+   * 押韵集 · /write — v2 creative workspace.
    *
-   * Fuses the existing Search + Analyze engines into a single "write
-   * with rhyme assist" workflow:
-   *   - Multi-line editor with per-line role labels (A/B/... ✓/~/✗)
-   *   - Live reverse-analysis of rhyme structure
-   *   - Scheme-driven constraint (free / monorhyme / AABB / ABAB / custom)
-   *   - Candidate panel pulling from searchByFinals
-   *   - Tab-to-insert candidate cycle
-   *   - Multi-draft localStorage persistence with auto-save
+   * Paragraph-based model: each paragraph is a self-contained "stanza"
+   * with its own editor and anchor sidebar. The user picks which words
+   * rhyme by either
+   *   - letting auto-anchoring pick the last dictionary-word of each
+   *     line, or
+   *   - selecting a substring in the editor and clicking "+ 把「…」
+   *     加为押韵锚点".
+   * Each anchor gets its own tone-mode toggle and candidate list.
    */
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import { base } from '$app/paths';
-  import { strictScheme } from '$lib/core/rhyme';
-  import { reverseAnalyze } from '$lib/core/analyze';
   import {
     getCurrentLexicon,
-    ensureExtendedLexicon,
-    searchByFinals
+    ensureExtendedLexicon
   } from '$lib/core/corpus';
   import type { Lexicon } from '$lib/core/corpus';
   import {
-    computeLetters,
-    computeAnchors,
-    evaluateLine,
-    FREE_LETTER,
-    type SchemeConfig
-  } from '$lib/core/write/scheme';
-  import { drafts } from '$lib/stores/drafts.svelte';
+    detectAutoAnchors,
+    mergeAutoAnchors,
+    revalidateManualAnchors,
+    buildDictSet,
+    type Anchor,
+    type ToneMode
+  } from '$lib/core/write/anchors';
+  import { drafts, type Paragraph } from '$lib/stores/drafts.svelte';
   import { t } from '$lib/stores/lang.svelte';
-  import Editor from '$lib/components/write/Editor.svelte';
-  import AssistPanel from '$lib/components/write/AssistPanel.svelte';
+  import ParagraphCard from '$lib/components/write/ParagraphCard.svelte';
   import DraftsPanel from '$lib/components/write/DraftsPanel.svelte';
 
-  // ── Default scheme ─────────────────────────────────────────────────
-  const DEFAULT_SCHEME: SchemeConfig = { type: 'free', depth: 2, toneMode: 'none' };
-
-  // ── Editor state (mirrors the current draft, persisted by side effect) ──
-  let editorText = $state('');
-  let scheme = $state<SchemeConfig>(DEFAULT_SCHEME);
-  let activeLineIndex = $state(0);
-  let focusMode = $state(false);
-  let draftsOpen = $state(false);
-  let hoveredKey = $state<string | null>(null);
-  let textareaEl = $state<HTMLTextAreaElement | null>(null);
-
-  // Tab-cycle state — we remember the cursor position before the first
-  // Tab insertion so subsequent Tabs can wipe back to it and insert the
-  // next candidate in the list.
-  let tabCycleIndex = $state<number | null>(null);
-  let tabAnchorText = $state('');          // editorText before insertion
-  let tabAnchorCursor = $state(0);
-
-  // ── Lexicon (seed on mount; extend in browser only) ────────────────
+  // ── Lexicon (seed first, extended streams in) ───────────────────
   let lexicon = $state<Lexicon>(getCurrentLexicon());
+  const dictSet = $derived(buildDictSet(lexicon));
 
-  onMount(() => {
-    // If no draft exists yet (first visit), seed a blank one.
-    if (!drafts.current) {
-      drafts.create(DEFAULT_SCHEME);
-    }
-    // Hydrate editor from the current draft.
+  // ── Working copy of the current draft's paragraphs ─────────────
+  // Kept as local $state so typing is fast; synced back to the drafts
+  // store with a 500ms debounce.
+  let paragraphs = $state<Paragraph[]>([]);
+  /** Which paragraph is currently focused (candidates render only for
+   *  this paragraph's anchors to save work). */
+  let focusedParagraphId = $state<string | null>(null);
+  let hoveredKey = $state<string | null>(null);
+  let draftsOpen = $state(false);
+
+  // Keep paragraphs in sync with the selected draft.
+  function loadFromDraft() {
     const cur = drafts.current;
     if (cur) {
-      editorText = cur.content;
-      scheme = cur.scheme;
+      paragraphs = cur.paragraphs.map((p) => ({ ...p, manualAnchors: [...p.manualAnchors] }));
+      focusedParagraphId = paragraphs[0]?.id ?? null;
+    } else {
+      paragraphs = [];
+      focusedParagraphId = null;
     }
-    // Start fetching the full lexicon for candidate queries.
+  }
+
+  onMount(() => {
+    if (!drafts.current) drafts.create();
+    loadFromDraft();
     ensureExtendedLexicon(base).then((lex) => { lexicon = lex; });
   });
 
-  // ── Auto-save (debounced) ──────────────────────────────────────────
+  // ── Debounced save ───────────────────────────────────────────────
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      const cur = drafts.current;
-      if (cur) drafts.update(cur.id, { content: editorText, scheme });
-    }, 2000);
+    saveTimer = setTimeout(flushSave, 500);
   }
-  // Also flush on tab blur / beforeunload
+  function flushSave() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    const cur = drafts.current;
+    if (!cur) return;
+    // Persist only the paragraphs & manual anchors — auto anchors are
+    // derived, not persisted.
+    drafts.setParagraphs(
+      cur.id,
+      paragraphs.map((p) => ({
+        id: p.id,
+        text: p.text,
+        manualAnchors: p.manualAnchors
+      }))
+    );
+  }
+
   onMount(() => {
-    const flush = () => {
-      const cur = drafts.current;
-      if (cur && (cur.content !== editorText || JSON.stringify(cur.scheme) !== JSON.stringify(scheme))) {
-        drafts.update(cur.id, { content: editorText, scheme });
-      }
-    };
+    const flush = () => flushSave();
     window.addEventListener('beforeunload', flush);
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) flush();
-    });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
     return () => {
       flush();
       window.removeEventListener('beforeunload', flush);
     };
   });
 
-  // ── Derived: rhyme analysis ─────────────────────────────────────────
-  const analysis = $derived(
-    reverseAnalyze(editorText, strictScheme, scheme.toneMode)
-  );
-  const lineCount = $derived(analysis.lines.length);
-  const letters = $derived(
-    computeLetters(scheme.type, lineCount, scheme.customPattern)
-  );
-  const anchors = $derived(
-    computeAnchors(letters, analysis.lines, scheme.depth)
-  );
-  const lineMatches = $derived(
-    analysis.lines.map((_, i) =>
-      evaluateLine(i, letters, analysis.lines, anchors, scheme.depth)
-    )
-  );
+  // ── Per-paragraph derived anchors ─────────────────────────────────
+  // For each paragraph, anchors = detect-auto(text) + revalidated-manual.
+  // We keep a per-paragraph "auto-anchor memo" so stable IDs are preserved
+  // across keystrokes that don't change the detected word.
+  let autoAnchorMemo = $state<Record<string, Anchor[]>>({});
 
-  // ── Derived: active line + candidate search ────────────────────────
-  const activeLineAnalysis = $derived(
-    activeLineIndex >= 0 && activeLineIndex < analysis.lines.length
-      ? analysis.lines[activeLineIndex]
-      : null
-  );
-  const activeLineMatch = $derived(
-    activeLineIndex >= 0 && activeLineIndex < lineMatches.length
-      ? lineMatches[activeLineIndex]
-      : null
-  );
-
-  /** Target finals to search rhymes for: group anchor's tail if the
-   *  active line is constrained, else the active line's own tail. Null
-   *  when there's nothing to search (empty line + free mode). */
-  const candidateTarget = $derived.by<readonly string[] | null>(() => {
-    if (!activeLineMatch || !activeLineAnalysis) return null;
-    if (activeLineMatch.state === 'anchor') {
-      // Anchor row — no "target" distinct from itself; hide candidates.
-      return null;
+  const paragraphAnchors = $derived.by<Record<string, Anchor[]>>(() => {
+    const dict = dictSet; // force dep
+    const out: Record<string, Anchor[]> = {};
+    for (const p of paragraphs) {
+      const fresh = detectAutoAnchors(p.text, dict);
+      const merged = mergeAutoAnchors(autoAnchorMemo[p.id] ?? [], fresh);
+      const validatedManual = revalidateManualAnchors(p.text, p.manualAnchors);
+      // Keep auto anchors first (by lineIndex), then manual
+      out[p.id] = [...merged, ...validatedManual];
     }
-    if (activeLineMatch.state !== 'free' && activeLineMatch.targetKeys.length > 0) {
-      return activeLineMatch.targetKeys;
-    }
-    // Free mode: search based on the line's current tail (if any) so the
-    // user can see what kinds of words would rhyme forward.
-    if (activeLineAnalysis.keys.length >= 2) {
-      const L = Math.min(scheme.depth, activeLineAnalysis.keys.length);
-      return activeLineAnalysis.keys.slice(-L);
-    }
-    return null;
-  });
-
-  const candidates = $derived.by(() => {
-    if (!candidateTarget || candidateTarget.length === 0) return null;
-    return searchByFinals(candidateTarget, strictScheme, lexicon, {
-      excludeText: activeLineAnalysis?.text,
-      maxPerBucket: 200,
-      toneMode: scheme.toneMode,
-      requireTailMatch: true,
-      windowMode: 'tail'
-    });
-  });
-
-  const flatHitsLen = $derived(
-    candidates ? candidates.buckets.reduce((n, b) => n + b.hits.length, 0) : 0
-  );
-
-  // ── Mutations ───────────────────────────────────────────────────────
-  function handleTextChange(newText: string) {
-    editorText = newText;
-    // Break out of Tab cycle on any free-form edit.
-    tabCycleIndex = null;
-    scheduleSave();
-  }
-
-  function handleSchemeChange(next: SchemeConfig) {
-    scheme = next;
-    scheduleSave();
-  }
-
-  async function insertAtCursor(insertion: string) {
-    if (!textareaEl) {
-      editorText = editorText + insertion;
-      scheduleSave();
-      return;
-    }
-    const start = textareaEl.selectionStart ?? editorText.length;
-    const end = textareaEl.selectionEnd ?? start;
-    const before = editorText.slice(0, start);
-    const after = editorText.slice(end);
-    editorText = before + insertion + after;
-    scheduleSave();
-    // Move cursor to end of inserted text after Svelte flushes.
-    const newPos = start + insertion.length;
-    await tick();
-    if (textareaEl) {
-      textareaEl.focus();
-      textareaEl.setSelectionRange(newPos, newPos);
-    }
-  }
-
-  // Flat candidate list mirror (we re-derive here for Tab cycling).
-  const flatCandidateTexts = $derived.by(() => {
-    if (!candidates) return [] as string[];
-    const out: string[] = [];
-    for (const b of candidates.buckets) for (const h of b.hits) out.push(h.phrase.text);
     return out;
   });
 
-  async function handleTab(): Promise<boolean> {
-    if (flatCandidateTexts.length === 0) return false;
-    // First Tab → start cycle at index 0, save undo checkpoint.
-    if (tabCycleIndex === null) {
-      if (!textareaEl) return false;
-      tabAnchorText = editorText;
-      tabAnchorCursor = textareaEl.selectionStart ?? editorText.length;
-      tabCycleIndex = 0;
-      await insertAtCursor(flatCandidateTexts[0]);
-      return true;
+  // Write the merged auto-anchors back to the memo so next diff reuses IDs.
+  $effect(() => {
+    const dict = dictSet; void dict; // dep
+    const newMemo: Record<string, Anchor[]> = {};
+    for (const p of paragraphs) {
+      newMemo[p.id] = (paragraphAnchors[p.id] ?? []).filter((a) => a.auto);
     }
-    // Subsequent Tab → roll back to anchor, insert next candidate.
-    const next = (tabCycleIndex + 1) % flatCandidateTexts.length;
-    tabCycleIndex = next;
-    const toInsert = flatCandidateTexts[next];
-    const before = tabAnchorText.slice(0, tabAnchorCursor);
-    const after = tabAnchorText.slice(tabAnchorCursor);
-    editorText = before + toInsert + after;
+    // Only update if actually different (avoid infinite loop).
+    let changed = false;
+    const oldKeys = Object.keys(autoAnchorMemo);
+    const newKeys = Object.keys(newMemo);
+    if (oldKeys.length !== newKeys.length) changed = true;
+    else for (const k of newKeys) {
+      const oldArr = autoAnchorMemo[k] ?? [];
+      const newArr = newMemo[k];
+      if (oldArr.length !== newArr.length) { changed = true; break; }
+      for (let i = 0; i < newArr.length; i++) {
+        if (oldArr[i]?.id !== newArr[i].id) { changed = true; break; }
+      }
+      if (changed) break;
+    }
+    if (changed) autoAnchorMemo = newMemo;
+  });
+
+  // ── Mutations on paragraphs ──────────────────────────────────────
+  function handleTextChange(id: string, newText: string) {
+    const idx = paragraphs.findIndex((p) => p.id === id);
+    if (idx < 0) return;
+    const arr = [...paragraphs];
+    arr[idx] = { ...arr[idx], text: newText };
+    paragraphs = arr;
     scheduleSave();
-    await tick();
-    if (textareaEl) {
-      textareaEl.focus();
-      const pos = tabAnchorCursor + toInsert.length;
-      textareaEl.setSelectionRange(pos, pos);
+  }
+
+  function handleManualAnchorsChange(id: string, newManual: Anchor[]) {
+    const idx = paragraphs.findIndex((p) => p.id === id);
+    if (idx < 0) return;
+    const arr = [...paragraphs];
+    arr[idx] = { ...arr[idx], manualAnchors: newManual };
+    paragraphs = arr;
+    scheduleSave();
+  }
+
+  function handleAnchorToneMode(paragraphId: string, anchorId: string, toneMode: ToneMode) {
+    // Tone mode applies to BOTH auto and manual anchors — but only
+    // manual ones are persisted. For auto anchors we persist via the
+    // memo so the next detection round reuses it.
+    const pIdx = paragraphs.findIndex((p) => p.id === paragraphId);
+    if (pIdx < 0) return;
+
+    // Try manual first
+    const mIdx = paragraphs[pIdx].manualAnchors.findIndex((a) => a.id === anchorId);
+    if (mIdx >= 0) {
+      const newManual = [...paragraphs[pIdx].manualAnchors];
+      newManual[mIdx] = { ...newManual[mIdx], toneMode };
+      handleManualAnchorsChange(paragraphId, newManual);
+      return;
     }
-    return true;
-  }
-
-  function handleSpecialKey(key: 'tab' | 'escape' | 'save'): boolean {
-    if (key === 'tab') {
-      // handleTab is async but we need to tell the Editor to preventDefault
-      // synchronously. Kick it off; the preventDefault itself only needs
-      // to happen if we would insert. Check length here to answer.
-      if (flatCandidateTexts.length === 0) return false;
-      handleTab();
-      return true;
+    // Auto — update the memo so it sticks through re-detection
+    const autos = autoAnchorMemo[paragraphId] ?? [];
+    const aIdx = autos.findIndex((a) => a.id === anchorId);
+    if (aIdx >= 0) {
+      const newAutos = [...autos];
+      newAutos[aIdx] = { ...newAutos[aIdx], toneMode };
+      autoAnchorMemo = { ...autoAnchorMemo, [paragraphId]: newAutos };
     }
-    if (key === 'escape') { tabCycleIndex = null; return false; }
-    if (key === 'save') { flushSave(); return true; }
-    return false;
   }
 
-  function handleInsertCandidate(text: string) {
-    tabCycleIndex = null;
-    insertAtCursor(text);
-  }
-
-  function flushSave() {
-    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  function addParagraph() {
     const cur = drafts.current;
-    if (cur) drafts.update(cur.id, { content: editorText, scheme });
+    if (!cur) return;
+    const newId = drafts.addParagraph(cur.id);
+    loadFromDraft();
+    focusedParagraphId = newId;
   }
 
-  // ── Drafts panel handlers ──────────────────────────────────────────
+  function deleteParagraph(paragraphId: string) {
+    const cur = drafts.current;
+    if (!cur) return;
+    if (paragraphs.length <= 1) {
+      // Last paragraph — just clear
+      handleTextChange(paragraphId, '');
+      handleManualAnchorsChange(paragraphId, []);
+      return;
+    }
+    if (!confirm(t('删除这一段？无法撤销。', 'Delete this paragraph? Cannot be undone.'))) return;
+    drafts.removeParagraph(cur.id, paragraphId);
+    loadFromDraft();
+  }
+
+  // ── Drafts panel handlers ──────────────────────────────────────
   function handleSelectDraft(id: string) {
     flushSave();
     drafts.setCurrent(id);
-    const cur = drafts.current;
-    if (cur) {
-      editorText = cur.content;
-      scheme = cur.scheme;
-      activeLineIndex = 0;
-      tabCycleIndex = null;
-    }
+    loadFromDraft();
     draftsOpen = false;
   }
   function handleCreateDraft() {
     flushSave();
-    drafts.create(DEFAULT_SCHEME);
-    const cur = drafts.current;
-    if (cur) {
-      editorText = cur.content;
-      scheme = cur.scheme;
-      activeLineIndex = 0;
-      tabCycleIndex = null;
-    }
+    drafts.create();
+    loadFromDraft();
     draftsOpen = false;
   }
 
-  // ── Copy / download ─────────────────────────────────────────────────
+  // ── Copy / download ─────────────────────────────────────────────
   let copiedAt = $state(0);
+  const allText = $derived(paragraphs.map((p) => p.text).join('\n\n'));
+
   function handleCopy() {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(editorText).then(() => { copiedAt = Date.now(); });
+      navigator.clipboard.writeText(allText).then(() => { copiedAt = Date.now(); });
     }
   }
   function handleDownload() {
     const title = drafts.current?.title || 'rhyme-draft';
-    const blob = new Blob([editorText], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([allText], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `${title}.txt`;
@@ -303,20 +239,6 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  // ── Keyboard shortcuts at page level ───────────────────────────────
-  function onGlobalKey(e: KeyboardEvent) {
-    // ⌘/ toggles focus mode
-    if ((e.metaKey || e.ctrlKey) && e.key === '/') {
-      e.preventDefault();
-      focusMode = !focusMode;
-    }
-  }
-  onMount(() => {
-    window.addEventListener('keydown', onGlobalKey);
-    return () => window.removeEventListener('keydown', onGlobalKey);
-  });
-
-  // Current draft title for display
   const currentTitle = $derived(drafts.current?.title ?? t('未命名草稿', 'Untitled'));
 </script>
 
@@ -325,29 +247,26 @@
   <meta
     name="description"
     content={t(
-      '中文歌词 / 说唱 / 诗歌写作工作台。边写边押 — 实时显示每行押韵状态、按 Tab 自动插入押韵候选词，支持 AABB / ABAB / 一韵到底等多种韵式。免费，不用 AI。',
-      'A writing workspace for Chinese lyrics, rap, and poetry. Live rhyme analysis as you type — press Tab to insert rhyme candidates, supports AABB / ABAB / monorhyme schemes. Free, no AI.'
+      '中文歌词 / 说唱 / 诗歌写作工作台。自动识别每行末尾的押韵锚点，也可选任意词作为押韵锚点，每个锚点独立显示押韵候选。',
+      'A creative workspace for Chinese lyrics, rap, and poetry. Each line auto-anchors its tail word, and any selected word can become an extra rhyme anchor — candidates live next to each anchor.'
     )}
   />
   <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/write/" />
 </svelte:head>
 
-<div class="mx-auto flex h-[calc(100vh-3.25rem)] max-w-7xl flex-col px-4 py-4">
+<div class="mx-auto max-w-7xl px-4 py-6">
   <!-- Title bar -->
-  <header class="mb-3 flex shrink-0 items-baseline justify-between gap-3">
+  <header class="mb-5 flex items-baseline justify-between gap-3">
     <div class="min-w-0">
       <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
         {t('写作', 'Write')}
       </h1>
-      <p class="text-xs text-zinc-500 truncate">
-        {currentTitle}
-      </p>
+      <p class="text-xs text-zinc-500 truncate">{currentTitle}</p>
     </div>
     <div class="flex shrink-0 items-center gap-1.5 text-xs">
       <button
         class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         onclick={() => (draftsOpen = true)}
-        title={t('草稿列表', 'Drafts')}
       >
         💾 {t('草稿', 'Drafts')} ({drafts.drafts.length})
       </button>
@@ -358,7 +277,7 @@
         {#if copiedAt && Date.now() - copiedAt < 2000}
           ✓ {t('已复制', 'Copied')}
         {:else}
-          📋 {t('复制', 'Copy')}
+          📋 {t('复制全部', 'Copy all')}
         {/if}
       </button>
       <button
@@ -367,65 +286,51 @@
       >
         ⬇ {t('下载', 'Download')}
       </button>
-      <button
-        class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 {focusMode ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-700' : ''}"
-        onclick={() => (focusMode = !focusMode)}
-        title={t('专注模式 (⌘/)', 'Focus mode (⌘/)')}
-      >
-        {focusMode ? '🔆' : '🌙'} {focusMode ? t('专注中', 'Focused') : t('专注', 'Focus')}
-      </button>
     </div>
   </header>
 
-  <!-- Main split: editor + assist panel -->
-  <div class="flex min-h-0 flex-1 gap-4 {focusMode ? '' : 'lg:grid lg:grid-cols-[1fr_22rem]'}">
-    <!-- Editor -->
-    <div class="flex min-h-0 flex-1 flex-col">
-      <Editor
-        text={editorText}
-        lineMatches={lineMatches}
-        activeLineIndex={activeLineIndex}
-        focusMode={focusMode}
-        onTextChange={handleTextChange}
-        onActiveLineChange={(i) => {
-          if (i !== activeLineIndex) tabCycleIndex = null;
-          activeLineIndex = i;
-        }}
-        onSpecialKey={handleSpecialKey}
-        bind:textareaRef={textareaEl}
-      />
-    </div>
-
-    <!-- Assist panel (hidden in focus mode) -->
-    {#if !focusMode}
-      <AssistPanel
-        scheme={scheme}
-        onSchemeChange={handleSchemeChange}
-        activeLineIndex={activeLineIndex}
-        activeLineAnalysis={activeLineAnalysis}
-        activeLineMatch={activeLineMatch}
-        candidates={candidates}
-        tabCycleIndex={tabCycleIndex}
-        onInsertCandidate={handleInsertCandidate}
-        onHoverKey={(k) => { hoveredKey = k; }}
+  <!-- Paragraph stack -->
+  <div class="space-y-4">
+    {#each paragraphs as para, idx (para.id)}
+      <ParagraphCard
+        paragraphId={para.id}
+        text={para.text}
+        anchors={paragraphAnchors[para.id] ?? []}
+        lexicon={lexicon}
+        focused={focusedParagraphId === para.id}
+        index={idx}
         hoveredKey={hoveredKey}
+        onTextChange={(txt) => handleTextChange(para.id, txt)}
+        onFocus={() => (focusedParagraphId = para.id)}
+        onManualAnchorsChange={(manual) => handleManualAnchorsChange(para.id, manual)}
+        onAnchorToneMode={(anchorId, tm) => handleAnchorToneMode(para.id, anchorId, tm)}
+        onDelete={() => deleteParagraph(para.id)}
+        onHoverKey={(k) => (hoveredKey = k)}
       />
-    {/if}
+    {/each}
   </div>
 
-  <!-- Bottom hint bar -->
-  <footer class="mt-2 shrink-0 font-mono text-[10px] text-zinc-400 dark:text-zinc-600">
-    <span class="mr-3">{t('Tab 插入候选', 'Tab: insert candidate')}</span>
-    <span class="mr-3">{t('Esc 退出候选循环', 'Esc: exit cycle')}</span>
-    <span class="mr-3">{t('⌘/ 专注模式', '⌘/: focus mode')}</span>
-    <span class="mr-3">{t('⌘S 保存', '⌘S: save')}</span>
-    {#if flatHitsLen > 0}
-      <span class="ml-auto text-emerald-500">{t(`${flatHitsLen} 条候选`, `${flatHitsLen} candidates`)}</span>
-    {/if}
+  <!-- New-paragraph button -->
+  <div class="mt-4 flex justify-center">
+    <button
+      class="rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 hover:border-sky-400 hover:text-sky-600 dark:hover:border-sky-600 dark:hover:text-sky-400"
+      onclick={addParagraph}
+    >
+      + {t('新段落', 'New paragraph')}
+    </button>
+  </div>
+
+  <!-- Footer hint -->
+  <footer class="mt-8 border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs text-zinc-400">
+    <p>
+      {t(
+        '默认：每行末尾的词（字典最长匹配）自动成为押韵锚点。选中任意字段可添加为额外锚点。每个锚点可单独选择严格度（韵母 / 韵母+声调）。',
+        'Default: each line\'s last dictionary-word becomes an auto anchor. Select any text to add a manual anchor. Each anchor has its own strictness toggle (rhyme only / rhyme + tone).'
+      )}
+    </p>
   </footer>
 </div>
 
-<!-- Drafts drawer -->
 <DraftsPanel
   open={draftsOpen}
   onClose={() => (draftsOpen = false)}
