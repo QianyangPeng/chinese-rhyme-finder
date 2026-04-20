@@ -10,7 +10,7 @@
    *   - Insert candidate into editor at current cursor position
    */
   import { tick } from 'svelte';
-  import type { Anchor, ToneMode } from '$lib/core/write/anchors';
+  import type { Anchor, GroupedAnchor, ToneMode } from '$lib/core/write/anchors';
   import { makeManualAnchor } from '$lib/core/write/anchors';
   import AnchorCard from './AnchorCard.svelte';
   import { t } from '$lib/stores/lang.svelte';
@@ -18,8 +18,9 @@
   interface Props {
     paragraphId: string;
     text: string;
-    /** All anchors for this paragraph (auto + manual, already merged by parent). */
-    anchors: readonly Anchor[];
+    /** All anchors for this paragraph (auto + manual, already merged
+     *  and assigned rhyme groups by parent). */
+    anchors: readonly GroupedAnchor[];
     /** True when this paragraph has the focus (editor or clicked). Only
      *  the focused paragraph actually fetches candidates for its anchors
      *  — saves work when a draft has many paragraphs. */

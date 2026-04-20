@@ -17,7 +17,9 @@
     detectAutoAnchors,
     mergeAutoAnchors,
     revalidateManualAnchors,
+    assignRhymeGroups,
     type Anchor,
+    type GroupedAnchor,
     type ToneMode
   } from '$lib/core/write/anchors';
   import { drafts, type Paragraph } from '$lib/stores/drafts.svelte';
@@ -102,15 +104,19 @@
   // across keystrokes that don't change the detected word.
   let autoAnchorMemo = $state<Record<string, Anchor[]>>({});
 
-  const paragraphAnchors = $derived.by<Record<string, Anchor[]>>(() => {
+  const paragraphAnchors = $derived.by<Record<string, GroupedAnchor[]>>(() => {
     const dict = dictSet; // force dep
-    const out: Record<string, Anchor[]> = {};
+    const out: Record<string, GroupedAnchor[]> = {};
     for (const p of paragraphs) {
       const fresh = detectAutoAnchors(p.text, dict);
       const merged = mergeAutoAnchors(autoAnchorMemo[p.id] ?? [], fresh);
       const validatedManual = revalidateManualAnchors(p.text, p.manualAnchors);
       // Keep auto anchors first (by lineIndex), then manual
-      out[p.id] = [...merged, ...validatedManual];
+      const combined = [...merged, ...validatedManual];
+      // Assign each anchor a rhyme-group id + color slot, and decide
+      // which ones get a dedicated candidate panel. Same-rhyme auto
+      // anchors after the first in a group become highlight-only.
+      out[p.id] = assignRhymeGroups(combined);
     }
     return out;
   });

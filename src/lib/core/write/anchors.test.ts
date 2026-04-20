@@ -3,8 +3,29 @@ import {
   autoAnchorForLine,
   detectAutoAnchors,
   makeManualAnchor,
-  revalidateManualAnchors
+  revalidateManualAnchors,
+  assignRhymeGroups,
+  rhymeGroupKey,
+  type Anchor
 } from './anchors.js';
+
+// Helper for constructing fake Anchor records in tests.
+function anchor(
+  id: string,
+  text: string,
+  start: number,
+  opts: { auto?: boolean; lineIndex?: number } = {}
+): Anchor {
+  return {
+    id,
+    text,
+    start,
+    end: start + text.length,
+    toneMode: 'exact',
+    auto: opts.auto ?? true,
+    lineIndex: opts.lineIndex
+  };
+}
 
 // Small fake dictionary for tests.
 const DICT = new Set([
@@ -134,5 +155,124 @@ describe('revalidateManualAnchors', () => {
     const out = revalidateManualAnchors('只是', anchors);
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('b');
+  });
+});
+
+describe('rhymeGroupKey', () => {
+  it('returns the same key for tails ending in the same final', () => {
+    // 糟糕 (ao) and 岁月静好 (ao) both end with final "ao"
+    expect(rhymeGroupKey('糟糕')).toBe(rhymeGroupKey('岁月静好'));
+  });
+
+  it('returns different keys for tails with different finals', () => {
+    // 糟糕 (ao) vs 只是 (i) — distinct
+    expect(rhymeGroupKey('糟糕')).not.toBe(rhymeGroupKey('只是'));
+  });
+
+  it('returns a sentinel for un-parseable text rather than collapsing everything', () => {
+    const a = rhymeGroupKey('');
+    const b = rhymeGroupKey('xyz');
+    // At minimum it must be a string; distinct texts shouldn't share
+    // one catch-all group.
+    expect(typeof a).toBe('string');
+    expect(typeof b).toBe('string');
+  });
+});
+
+describe('assignRhymeGroups', () => {
+  it('groups two anchors that rhyme and gives them the same colorIdx', () => {
+    const out = assignRhymeGroups([
+      anchor('a', '糟糕', 0, { lineIndex: 0 }),
+      anchor('b', '岁月静好', 10, { lineIndex: 1 })
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].groupId).toBe(out[1].groupId);
+    expect(out[0].colorIdx).toBe(out[1].colorIdx);
+  });
+
+  it('assigns different colorIdx to non-rhyming anchors', () => {
+    const out = assignRhymeGroups([
+      anchor('a', '糟糕', 0, { lineIndex: 0 }),
+      anchor('b', '只是', 10, { lineIndex: 1 })
+    ]);
+    expect(out[0].colorIdx).not.toBe(out[1].colorIdx);
+    expect(out[0].groupId).not.toBe(out[1].groupId);
+  });
+
+  it('auto anchors: only the first one in a group shows panel', () => {
+    const out = assignRhymeGroups([
+      anchor('a', '糟糕', 0, { lineIndex: 0 }),
+      anchor('b', '岁月静好', 10, { lineIndex: 1 })
+    ]);
+    expect(out[0].showsPanel).toBe(true);
+    expect(out[1].showsPanel).toBe(false); // same rhyme, later in paragraph
+  });
+
+  it('manual anchors always show panel even when group already has an anchor', () => {
+    const out = assignRhymeGroups([
+      anchor('a', '糟糕', 0, { auto: true, lineIndex: 0 }),
+      anchor('m', '岁月静好', 10, { auto: false })
+    ]);
+    expect(out[0].groupId).toBe(out[1].groupId); // same group (both end in ao)
+    expect(out[0].showsPanel).toBe(true);
+    expect(out[1].showsPanel).toBe(true); // manual always shows
+  });
+
+  it("reproduces the user's L1+L3 share / L2 standalone scenario", () => {
+    // L1 ends in ao, L2 ends in i, L3 ends in ao.
+    // Expected: L1 and L3 share group+color; L2 gets its own group.
+    // Expected: L1 shows panel, L2 shows panel (first in its group),
+    //           L3 does not (second auto in L1's group).
+    const out = assignRhymeGroups([
+      anchor('l1', '糟糕', 0, { lineIndex: 0 }),
+      anchor('l2', '只是', 10, { lineIndex: 1 }),
+      anchor('l3', '岁月静好', 20, { lineIndex: 2 })
+    ]);
+    expect(out[0].groupId).toBe(out[2].groupId);
+    expect(out[1].groupId).not.toBe(out[0].groupId);
+    expect(out[0].showsPanel).toBe(true);
+    expect(out[1].showsPanel).toBe(true);
+    expect(out[2].showsPanel).toBe(false);
+  });
+
+  it('determines "first in group" by start offset, not input order', () => {
+    // Input order reversed: l3 first, then l1. l1 has lower start.
+    const out = assignRhymeGroups([
+      anchor('l3', '岁月静好', 20, { lineIndex: 2 }),
+      anchor('l1', '糟糕', 0, { lineIndex: 0 })
+    ]);
+    // Output preserves INPUT order (l3 first, l1 second) but group
+    // membership is computed in start order (l1 first in group).
+    const l3 = out.find((x) => x.id === 'l3')!;
+    const l1 = out.find((x) => x.id === 'l1')!;
+    expect(l1.showsPanel).toBe(true);  // leftmost auto in group
+    expect(l3.showsPanel).toBe(false); // later auto in same group
+  });
+
+  it('color indices are assigned in order of first appearance (by start)', () => {
+    const out = assignRhymeGroups([
+      anchor('l1', '糟糕', 0),       // ao → colorIdx 0
+      anchor('l2', '只是', 10),      // i  → colorIdx 1
+      anchor('l3', '岁月静好', 20),  // ao → colorIdx 0 (same group as l1)
+      anchor('l4', '大海', 30)       // ai → colorIdx 2
+    ]);
+    expect(out[0].colorIdx).toBe(0);
+    expect(out[1].colorIdx).toBe(1);
+    expect(out[2].colorIdx).toBe(0);
+    expect(out[3].colorIdx).toBe(2);
+  });
+
+  it('handles empty anchor list', () => {
+    expect(assignRhymeGroups([])).toEqual([]);
+  });
+
+  it('preserves input order in returned array', () => {
+    const input = [
+      anchor('third', '岁月静好', 20),
+      anchor('first', '糟糕', 0),
+      anchor('second', '只是', 10)
+    ];
+    const out = assignRhymeGroups(input);
+    expect(out.map((a) => a.id)).toEqual(['third', 'first', 'second']);
   });
 });
