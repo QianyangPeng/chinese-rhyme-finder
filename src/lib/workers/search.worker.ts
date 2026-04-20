@@ -25,7 +25,15 @@ import type { Lexicon, PhraseRecord } from '$lib/core/corpus/types';
 // ── Outgoing message shapes ──────────────────────────────────────
 export type WorkerMessage =
   | { type: 'progress'; phrasesLoaded: number; sourceLoaded: string }
-  | { type: 'ready'; totalPhrases: number }
+  | {
+      type: 'ready';
+      totalPhrases: number;
+      /** 2–4 char texts from dictionary-like sources. Used by /write
+       *  page for auto-anchor maximal-match (which runs on main
+       *  thread). Sent once on ready so main never touches the full
+       *  lexicon. ~130k strings, single-digit MB structured-clone. */
+      dictTexts: string[];
+    }
   | { type: 'result'; id: number; result: GroupedSearchResult }
   | { type: 'error'; id?: number; message: string };
 
@@ -195,7 +203,23 @@ async function loadLexicon(baseUrl: string): Promise<void> {
     }
   }));
 
-  const ready: WorkerMessage = { type: 'ready', totalPhrases: _allRecords.length };
+  // Build the dictionary text set for /write page's auto-anchor
+  // detection. Main thread only needs these texts, not full records.
+  const DICT_SOURCES = new Set([
+    'cedict', 'xinhua-idiom', 'xinhua-xiehouyu', 'wiktionary-slang'
+  ]);
+  const dictTexts: string[] = [];
+  for (const p of _allRecords) {
+    if (p.length < 2 || p.length > 4) continue;
+    if (!DICT_SOURCES.has(p.source)) continue;
+    dictTexts.push(p.text);
+  }
+
+  const ready: WorkerMessage = {
+    type: 'ready',
+    totalPhrases: _allRecords.length,
+    dictTexts
+  };
   postMessage(ready);
 }
 

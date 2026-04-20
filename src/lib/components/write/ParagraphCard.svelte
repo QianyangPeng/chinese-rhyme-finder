@@ -10,7 +10,6 @@
    *   - Insert candidate into editor at current cursor position
    */
   import { tick } from 'svelte';
-  import type { Lexicon } from '$lib/core/corpus';
   import type { Anchor, ToneMode } from '$lib/core/write/anchors';
   import { makeManualAnchor } from '$lib/core/write/anchors';
   import AnchorCard from './AnchorCard.svelte';
@@ -21,7 +20,6 @@
     text: string;
     /** All anchors for this paragraph (auto + manual, already merged by parent). */
     anchors: readonly Anchor[];
-    lexicon: Lexicon;
     /** True when this paragraph has the focus (editor or clicked). Only
      *  the focused paragraph actually fetches candidates for its anchors
      *  — saves work when a draft has many paragraphs. */
@@ -41,7 +39,6 @@
     paragraphId,
     text,
     anchors,
-    lexicon,
     focused,
     index,
     hoveredKey,
@@ -183,7 +180,6 @@
         {#each anchors as anchor (anchor.id)}
           <AnchorCard
             {anchor}
-            {lexicon}
             active={focused}
             hoveredKey={hoveredKey}
             onToneModeChange={(tm) => onAnchorToneMode(anchor.id, tm)}

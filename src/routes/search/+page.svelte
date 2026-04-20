@@ -12,8 +12,7 @@
   import {
     searchClient,
     type GroupedSearchResult,
-    type TailGroup,
-    type GroupHit
+    type TailGroup
   } from '$lib/workers/searchClient.svelte';
   import { SOURCES, sourceMeta, SOURCE_IDS_BY_PRIORITY } from '$lib/util/sources';
   import { base } from '$app/paths';
@@ -162,9 +161,10 @@
   }
 
   /** A tail-group's "primary source" = highest-priority source among
-   *  its hits. The group lives in that source's mini-section. Hits
-   *  from other sources are not dropped — they're rendered under
-   *  their own source (via `hitsInGroupForSource`). */
+   *  its hits. The chip lives in that source's mini-section and is NOT
+   *  repeated in other sections. When expanded, we show ALL hits in the
+   *  group (regardless of their own source) — users see every phrase
+   *  that rhymes this way, with each hit tagged by its own source badge. */
   function primarySourceFor(g: TailGroup): string {
     if (g.hits.length === 0) return 'wiktionary-slang';
     let bestId = g.hits[0].source;
@@ -192,10 +192,6 @@
     }
     out.sort((a, b) => sourceMeta(a.sourceId).priority - sourceMeta(b.sourceId).priority);
     return out;
-  }
-
-  function hitsInGroupForSource(g: TailGroup, sourceId: string): GroupHit[] {
-    return g.hits.filter((h) => h.source === sourceId);
   }
 
   function presetExample(q: string) { query = q; }
@@ -423,7 +419,7 @@
 
                           {#if isOpen}
                             <ul class="mt-1.5 space-y-1 rounded border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2">
-                              {#each hitsInGroupForSource(g, sg.sourceId) as hit (hit.text)}
+                              {#each g.hits as hit (hit.text)}
                                 {@const hmeta = sourceMeta(hit.source)}
                                 <li class="rounded px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                                   <div class="flex items-baseline justify-between gap-2">

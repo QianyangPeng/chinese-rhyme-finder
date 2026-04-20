@@ -14,27 +14,25 @@
   import { onMount } from 'svelte';
   import { base } from '$app/paths';
   import {
-    getCurrentLexicon,
-    ensureExtendedLexicon,
-    onLexiconUpdate
-  } from '$lib/core/corpus';
-  import type { Lexicon } from '$lib/core/corpus';
-  import {
     detectAutoAnchors,
     mergeAutoAnchors,
     revalidateManualAnchors,
-    buildDictSet,
     type Anchor,
     type ToneMode
   } from '$lib/core/write/anchors';
   import { drafts, type Paragraph } from '$lib/stores/drafts.svelte';
   import { t } from '$lib/stores/lang.svelte';
+  import { searchClient } from '$lib/workers/searchClient.svelte';
   import ParagraphCard from '$lib/components/write/ParagraphCard.svelte';
   import DraftsPanel from '$lib/components/write/DraftsPanel.svelte';
 
-  // ── Lexicon (seed first, extended streams in) ───────────────────
-  let lexicon = $state<Lexicon>(getCurrentLexicon());
-  const dictSet = $derived(buildDictSet(lexicon));
+  // ── Dict set for auto-anchor detection ───────────────────────────
+  // Main thread doesn't load the 800k lexicon. The worker owns it and
+  // ships back a 130k-entry text set (dictionary sources only, 2–4
+  // chars) once ready. Until ready, dict is empty → auto-anchor falls
+  // back to last-2-char heuristic, which is a reasonable starting
+  // state while phrases stream in.
+  const dictSet = $derived(searchClient.dictSet);
 
   // ── Working copy of the current draft's paragraphs ─────────────
   // Kept as local $state so typing is fast; synced back to the drafts
@@ -61,9 +59,9 @@
   onMount(() => {
     if (!drafts.current) drafts.create();
     loadFromDraft();
-    const unsub = onLexiconUpdate((lex) => { lexicon = lex; });
-    ensureExtendedLexicon(base).then((lex) => { lexicon = lex; });
-    return unsub;
+    // Kick off worker init if it hasn't been already (e.g. when the
+    // user lands on /write first without visiting /search). Idempotent.
+    searchClient.init(base);
   });
 
   // ── Debounced save ───────────────────────────────────────────────
@@ -299,7 +297,6 @@
         paragraphId={para.id}
         text={para.text}
         anchors={paragraphAnchors[para.id] ?? []}
-        lexicon={lexicon}
         focused={focusedParagraphId === para.id}
         index={idx}
         hoveredKey={hoveredKey}

@@ -39,6 +39,10 @@ class SearchClient {
   isReady = $state(false);
   phrasesLoaded = $state(0);
   lastProgressSource = $state<string | null>(null);
+  /** 2–4 char dictionary word set, populated once on `ready`. Used by
+   *  /write page's auto-anchor detection. Main thread never touches the
+   *  full lexicon — only this lightweight text set. */
+  dictSet = $state<Set<string>>(new Set());
 
   private worker: Worker | null = null;
   private nextId = 1;
@@ -85,6 +89,7 @@ class SearchClient {
         break;
       case 'ready':
         this.phrasesLoaded = msg.totalPhrases;
+        this.dictSet = new Set(msg.dictTexts);
         this.isReady = true;
         break;
       case 'result': {
