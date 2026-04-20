@@ -5,6 +5,7 @@
   import {
     getCurrentLexicon,
     ensureExtendedLexicon,
+    onLexiconUpdate,
     searchByFinals,
     searchByTail
   } from '$lib/core/corpus';
@@ -40,10 +41,12 @@
     if (win === 'anywhere') windowMode = 'anywhere';
     urlReady = true;
 
-    // Fire-and-forget: swap in the big lexicon once it loads.
-    ensureExtendedLexicon(base).then((lex) => {
-      lexicon = lex;
-    });
+    // Incremental lexicon: subscribe to each rebuild as files stream in,
+    // so the UI doesn't block on ALL 42 files finishing. Every ~200ms
+    // of loading fires a callback with the growing Lexicon.
+    const unsub = onLexiconUpdate((lex) => { lexicon = lex; });
+    ensureExtendedLexicon(base).then((lex) => { lexicon = lex; });
+    return unsub;
   });
 
   // Mirror state back into the URL so results are shareable. Waits until

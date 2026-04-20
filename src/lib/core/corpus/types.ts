@@ -53,13 +53,26 @@ export interface PhraseRecord {
 }
 
 /**
- * The full lexicon plus light precomputed indexes. For ~200-50k phrases,
- * a Map<length, indices[]> is plenty; replace with a real inverted index
- * when the corpus crosses ~100k entries.
+ * The full lexicon plus precomputed indexes. Crossing ~100k phrases
+ * made per-search `O(N)` scans untenable (~500ms per search on 800k
+ * phrases blocked main-thread fetches during streaming load), so we
+ * now ship an inverted index on the last-final-key as well — that
+ * slashes search cost to `O(tail-matches)`, typically 1-3% of N.
  */
 export interface Lexicon {
   /** All phrase records, indexed by `phraseId` = position in this array. */
   readonly phrases: readonly PhraseRecord[];
   /** length → sorted list of phrase IDs of that length. */
   readonly byLength: ReadonlyMap<number, readonly number[]>;
+  /**
+   * `strictScheme.keyOf(phrase.finals[last])` → phrase IDs ending in
+   * that rhyme body. Built by the loader once per rebuild so every
+   * search is a 1-lookup pre-filter rather than a full-corpus scan.
+   *
+   * Only strictScheme keys are indexed (the only scheme the UI uses).
+   * When `requireTailMatch` is true (the default), searchByFinals
+   * iterates just `byLastFinalKey.get(targetLastKey)` instead of all
+   * ~800k phrases.
+   */
+  readonly byLastFinalKey: ReadonlyMap<string, readonly number[]>;
 }

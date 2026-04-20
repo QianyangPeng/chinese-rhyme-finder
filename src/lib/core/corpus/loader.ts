@@ -11,8 +11,41 @@
  */
 
 import { parseSyllables } from '../pinyin/parser.js';
+import { strictScheme } from '../rhyme/schemes/strict.js';
 import type { Lexicon, PhraseRecord } from './types.js';
 import { SEED_PHRASES, type SeedPhrase } from './seed-data.js';
+
+/** Build the per-phrase indexes used by search: byLength + byLastFinalKey.
+ *  Extracted so both `buildLexicon` (seed path) and `lexiconFromRecords`
+ *  (streaming-merge path) share one implementation. */
+function buildIndexes(records: readonly PhraseRecord[]): {
+  byLength: Map<number, number[]>;
+  byLastFinalKey: Map<string, number[]>;
+} {
+  const byLength = new Map<number, number[]>();
+  const byLastFinalKey = new Map<string, number[]>();
+  for (let id = 0; id < records.length; id++) {
+    const p = records[id];
+    // byLength
+    let lb = byLength.get(p.length);
+    if (!lb) { lb = []; byLength.set(p.length, lb); }
+    lb.push(id);
+    // byLastFinalKey — strictScheme is the only UI scheme, so we bake
+    // its keyOf into the index. Keys like "a" catch final "a"/"ua"/"ia"
+    // together (all medial-stripped to body "a"), which matches how
+    // requireTailMatch=true evaluates at search time.
+    if (p.finals.length > 0) {
+      const lastFinal = p.finals[p.finals.length - 1];
+      const lastKey = strictScheme.keyOf(lastFinal);
+      if (lastKey) {
+        let kb = byLastFinalKey.get(lastKey);
+        if (!kb) { kb = []; byLastFinalKey.set(lastKey, kb); }
+        kb.push(id);
+      }
+    }
+  }
+  return { byLength, byLastFinalKey };
+}
 
 const DEFAULT_QUALITY = 0.8;
 const DEFAULT_SOURCE = 'seed-v1';
@@ -47,22 +80,8 @@ export function buildLexicon(seeds: readonly SeedPhrase[] = SEED_PHRASES): Lexic
     });
   }
 
-  // Build length index
-  const byLength = new Map<number, number[]>();
-  for (let id = 0; id < records.length; id++) {
-    const L = records[id].length;
-    let bucket = byLength.get(L);
-    if (!bucket) {
-      bucket = [];
-      byLength.set(L, bucket);
-    }
-    bucket.push(id);
-  }
-
-  return {
-    phrases: records,
-    byLength
-  };
+  const { byLength, byLastFinalKey } = buildIndexes(records);
+  return { phrases: records, byLength, byLastFinalKey };
 }
 
 /** Lazily-built default lexicon (the seed). Imported by Search to avoid
@@ -91,17 +110,8 @@ export function getDefaultLexicon(): Lexicon {
 /** Build a Lexicon directly from an already-scored, finals-enriched
  *  phrase list (the shape emitted by scripts/build_lexicon.mjs). */
 function lexiconFromRecords(records: readonly PhraseRecord[]): Lexicon {
-  const byLength = new Map<number, number[]>();
-  for (let id = 0; id < records.length; id++) {
-    const L = records[id].length;
-    let bucket = byLength.get(L);
-    if (!bucket) {
-      bucket = [];
-      byLength.set(L, bucket);
-    }
-    bucket.push(id);
-  }
-  return { phrases: records, byLength };
+  const { byLength, byLastFinalKey } = buildIndexes(records);
+  return { phrases: records, byLength, byLastFinalKey };
 }
 
 /** Merge seed + fetched records. Seed records win on duplicates since

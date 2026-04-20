@@ -128,143 +128,131 @@ export function searchByFinals(
     () => []
   );
 
-  // Track which phrase IDs we've already matched (same-length pass) so
-  // we don't add them again in the longer-phrase pass.
-  const seen = new Set<number>();
+  if (targetLength === 0) {
+    return { targetLength: 0, buckets: [], totalHits: 0 };
+  }
 
-  // ── Pass 1: same-length phrases (full positional match) ────────────
-  const sameLengthIds = lexicon.byLength.get(targetLength) ?? [];
-  for (const id of sameLengthIds) {
+  // ── Index-driven candidate iteration ─────────────────────────────
+  //
+  // The old algorithm iterated all phrases in 3 passes (same-length,
+  // longer, shorter). On 800k phrases with 3-5 ops each that was
+  // ~3M ops per search — enough to freeze a tab and starve fetch
+  // handlers during lexicon streaming.
+  //
+  // New strategy: when `requireTailMatch` is true (the default UI
+  // setting), the candidate's LAST final must map to the same key as
+  // the target's last final. So we pre-filter via `byLastFinalKey` —
+  // one lookup returns the tiny subset of phrases that could possibly
+  // rhyme. Typically 1-5% of the corpus. Everything else is skipped
+  // before we ever touch it.
+  //
+  // When requireTailMatch is false we fall back to iterating all
+  // phrases (rare UI path — user has to uncheck "必须押韵").
+  const targetLastFinal = target[target.length - 1];
+  const targetLastKey = scheme.keyOf(targetLastFinal);
+
+  let candidateIds: Iterable<number>;
+  if (requireTailMatch && targetLastKey) {
+    candidateIds = lexicon.byLastFinalKey.get(targetLastKey) ?? [];
+  } else {
+    // Full-scan fallback (rare).
+    const ids: number[] = [];
+    for (const bucket of lexicon.byLength.values()) {
+      for (const id of bucket) ids.push(id);
+    }
+    candidateIds = ids;
+  }
+
+  // If caller set toneMode='exact', they also want the last tone to
+  // match. That's equivalent to the byLastFinalKey filter PLUS a tone
+  // check per candidate. We do the tone check inside the loop; it
+  // prunes a handful of items cheaply.
+  const targetLastTone = toneMode === 'exact'
+    ? ((targetTones?.[target.length - 1] ?? 0) as Tone)
+    : null;
+
+  for (const id of candidateIds) {
     const phrase = lexicon.phrases[id];
+    if (phrase.length < 2) continue;   // single syllables are noise
     if (excludeText !== undefined && phrase.text === excludeText) continue;
 
-    const candKeys = phrase.finals.map((f, i) =>
-      composeKey(f, (phrase.tones?.[i] ?? 0) as Tone, scheme, toneMode)
-    );
-    const match = matchFullKeys(targetKeys, candKeys);
-    if (!match) continue;
-    if (match.relaxationLevel > maxLevel) continue;
-    // If the user wants the end to rhyme (default), drop candidates
-    // whose last position didn't match.
-    if (requireTailMatch && targetLength > 0) {
-      const last = match.perPosition.length - 1;
-      if (last >= 0 && !match.perPosition[last]) continue;
+    // Tail tone check (cheap) — only relevant for toneMode='exact'
+    // since the byLastFinalKey index is tone-agnostic.
+    if (targetLastTone !== null) {
+      const phraseLastTone = (phrase.tones?.[phrase.length - 1] ?? 0) as Tone;
+      if (phraseLastTone !== targetLastTone) continue;
     }
 
-    seen.add(id);
-    buckets[match.relaxationLevel].push({
-      phrase,
-      match,
-      level: match.relaxationLevel,
-      matchOffset: 0
-    });
-  }
+    // Compose this candidate's keys once (reused for window slides on
+    // longer candidates).
+    const candKeys: string[] = new Array(phrase.length);
+    for (let i = 0; i < phrase.length; i++) {
+      candKeys[i] = composeKey(
+        phrase.finals[i],
+        (phrase.tones?.[i] ?? 0) as Tone,
+        scheme,
+        toneMode
+      );
+    }
 
-  // ── Pass 2: longer phrases — slide a window of size targetLength ───
-  // Window placement depends on `windowMode`:
-  //   - 'tail'     — only check the tail position (offset = N - L)
-  //   - 'anywhere' — every starting offset 0 ≤ o ≤ N - L; pick best window
-  //                  (lowest relaxation, then largest offset so we still
-  //                  prefer end rhymes when ties).
-  // This allows "降维打击" to match "我超喜欢降维打击" or longer lyrics
-  // lines that contain the target as an internal rhyme group.
-  if (targetLength > 0) {
-    for (const [phraseLen, ids] of lexicon.byLength) {
-      if (phraseLen <= targetLength) continue;
-      for (const id of ids) {
-        if (seen.has(id)) continue;
-        const phrase = lexicon.phrases[id];
-        if (excludeText !== undefined && phrase.text === excludeText) continue;
-
-        // Compose ALL candidate keys once so multiple windows reuse them.
-        const candKeys: string[] = new Array(phrase.length);
-        for (let i = 0; i < phrase.length; i++) {
-          candKeys[i] = composeKey(
-            phrase.finals[i],
-            (phrase.tones?.[i] ?? 0) as Tone,
-            scheme,
-            toneMode
-          );
+    // Route to the appropriate comparison based on length.
+    if (phrase.length === targetLength) {
+      // Same-length: straight positional compare.
+      const match = matchFullKeys(targetKeys, candKeys);
+      if (!match) continue;
+      if (match.relaxationLevel > maxLevel) continue;
+      if (requireTailMatch) {
+        const last = match.perPosition.length - 1;
+        if (last >= 0 && !match.perPosition[last]) continue;
+      }
+      buckets[match.relaxationLevel].push({
+        phrase, match, level: match.relaxationLevel, matchOffset: 0
+      });
+    } else if (phrase.length > targetLength) {
+      // Longer candidate: slide a window of size targetLength.
+      const tailOffset = phrase.length - targetLength;
+      const startOffset = windowMode === 'anywhere' ? 0 : tailOffset;
+      let bestMatch: RhymeMatch | null = null;
+      let bestOffset = -1;
+      for (let off = startOffset; off <= tailOffset; off++) {
+        const window = candKeys.slice(off, off + targetLength);
+        const m = matchFullKeys(targetKeys, window);
+        if (!m) continue;
+        if (m.relaxationLevel > maxLevel) continue;
+        if (requireTailMatch) {
+          const last = m.perPosition.length - 1;
+          if (last >= 0 && !m.perPosition[last]) continue;
         }
-
-        const tailOffset = phrase.length - targetLength;
-        const startOffset = windowMode === 'anywhere' ? 0 : tailOffset;
-
-        let bestMatch: RhymeMatch | null = null;
-        let bestOffset = -1;
-        for (let off = startOffset; off <= tailOffset; off++) {
-          const window = candKeys.slice(off, off + targetLength);
-          const m = matchFullKeys(targetKeys, window);
-          if (!m) continue;
-          if (m.relaxationLevel > maxLevel) continue;
-          if (requireTailMatch) {
-            const last = m.perPosition.length - 1;
-            if (last >= 0 && !m.perPosition[last]) continue;
-          }
-          // Prefer lower relaxation; tie-break: prefer the tail position
-          // (largest offset) so end-rhymes still win ties.
-          if (
-            !bestMatch ||
-            m.relaxationLevel < bestMatch.relaxationLevel ||
-            (m.relaxationLevel === bestMatch.relaxationLevel && off > bestOffset)
-          ) {
-            bestMatch = m;
-            bestOffset = off;
-          }
-        }
-
-        if (bestMatch) {
-          buckets[bestMatch.relaxationLevel].push({
-            phrase,
-            match: bestMatch,
-            level: bestMatch.relaxationLevel,
-            matchOffset: bestOffset
-          });
+        if (
+          !bestMatch ||
+          m.relaxationLevel < bestMatch.relaxationLevel ||
+          (m.relaxationLevel === bestMatch.relaxationLevel && off > bestOffset)
+        ) {
+          bestMatch = m;
+          bestOffset = off;
         }
       }
-    }
-  }
-
-  // ── Pass 3: SHORTER phrases — candidate's full sequence vs target's tail
-  // ──────────────────────────────────────────────────────────────────────
-  // When the target is "岁月静好" (4 syllables), "青岛" (2 syllables)
-  // should be a hit because its two finals match the target's last two.
-  // We compare the whole candidate against target[N-M ..N-1] — i.e., the
-  // candidate IS the rhyme window.
-  //
-  // Single-syllable candidates are skipped (too noisy — half the lexicon
-  // shares the last final).
-  if (targetLength >= 2) {
-    for (const [phraseLen, ids] of lexicon.byLength) {
-      if (phraseLen >= targetLength || phraseLen < 2) continue;
-      const M = phraseLen;
-      // Slice out the target's tail of length M — the reference window.
-      const targetTail = targetKeys.slice(targetLength - M);
-
-      for (const id of ids) {
-        if (seen.has(id)) continue;
-        const phrase = lexicon.phrases[id];
-        if (excludeText !== undefined && phrase.text === excludeText) continue;
-
-        const candKeys = phrase.finals.map((f, i) =>
-          composeKey(f, (phrase.tones?.[i] ?? 0) as Tone, scheme, toneMode)
-        );
-        const match = matchFullKeys(targetTail, candKeys);
-        if (!match) continue;
-        if (match.relaxationLevel > maxLevel) continue;
-        if (requireTailMatch) {
-          const last = match.perPosition.length - 1;
-          if (last >= 0 && !match.perPosition[last]) continue;
-        }
-
-        buckets[match.relaxationLevel].push({
-          phrase,
-          match,
-          level: match.relaxationLevel,
-          // The match spans the whole candidate — offset 0 inside phrase.
-          matchOffset: 0
+      if (bestMatch) {
+        buckets[bestMatch.relaxationLevel].push({
+          phrase, match: bestMatch, level: bestMatch.relaxationLevel, matchOffset: bestOffset
         });
       }
+    } else {
+      // Shorter candidate (2 ≤ M < targetLength): compare the full
+      // candidate against target's tail of the same length.
+      const M = phrase.length;
+      if (targetLength < 2) continue;  // can't take a 2-tail out of 1
+      const targetTail = targetKeys.slice(targetLength - M);
+      const match = matchFullKeys(targetTail, candKeys);
+      if (!match) continue;
+      if (match.relaxationLevel > maxLevel) continue;
+      if (requireTailMatch) {
+        const last = match.perPosition.length - 1;
+        if (last >= 0 && !match.perPosition[last]) continue;
+      }
+      buckets[match.relaxationLevel].push({
+        phrase, match, level: match.relaxationLevel, matchOffset: 0
+      });
     }
   }
 

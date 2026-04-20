@@ -15,7 +15,8 @@
   import { base } from '$app/paths';
   import {
     getCurrentLexicon,
-    ensureExtendedLexicon
+    ensureExtendedLexicon,
+    onLexiconUpdate
   } from '$lib/core/corpus';
   import type { Lexicon } from '$lib/core/corpus';
   import {
@@ -60,7 +61,9 @@
   onMount(() => {
     if (!drafts.current) drafts.create();
     loadFromDraft();
+    const unsub = onLexiconUpdate((lex) => { lexicon = lex; });
     ensureExtendedLexicon(base).then((lex) => { lexicon = lex; });
+    return unsub;
   });
 
   // ── Debounced save ───────────────────────────────────────────────
