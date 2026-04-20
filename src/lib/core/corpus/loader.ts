@@ -205,21 +205,46 @@ const FALLBACK_SOURCE_FILES = [
 
 let _allRecords: PhraseRecord[] = [];
 let _seenTexts = new Set<string>();
+/** Indexes are maintained incrementally in `_mergeNewPhrases` so the
+ *  lexicon "rebuild" is O(1) (just packages references into a new
+ *  Lexicon object) — critical during streaming load where files arrive
+ *  every 10-200ms. A full O(N) rebuild on each notify would be
+ *  quadratic over the load. */
+let _byLength = new Map<number, number[]>();
+let _byLastFinalKey = new Map<string, number[]>();
 let _currentLexicon: Lexicon | null = null;
 
 /** Callbacks registered by pages that want to re-render on each source load. */
 const _onUpdateCallbacks: Array<(lex: Lexicon) => void> = [];
 
+/** Assemble a Lexicon view pointing at the current indexes. O(1) —
+ *  does not recompute indexes, they're kept live by _mergeNewPhrases. */
 function _rebuildLexicon(): Lexicon {
-  _currentLexicon = lexiconFromRecords(_allRecords);
+  _currentLexicon = {
+    phrases: _allRecords,
+    byLength: _byLength,
+    byLastFinalKey: _byLastFinalKey
+  };
   return _currentLexicon;
 }
 
 function _mergeNewPhrases(phrases: PhraseRecord[]): void {
   for (const p of phrases) {
-    if (!_seenTexts.has(p.text)) {
-      _seenTexts.add(p.text);
-      _allRecords.push(p);
+    if (_seenTexts.has(p.text)) continue;
+    _seenTexts.add(p.text);
+    const id = _allRecords.length;
+    _allRecords.push(p);
+    // Keep indexes in sync as we go — avoids the full-rebuild cost.
+    let lb = _byLength.get(p.length);
+    if (!lb) { lb = []; _byLength.set(p.length, lb); }
+    lb.push(id);
+    if (p.finals.length > 0) {
+      const lastKey = strictScheme.keyOf(p.finals[p.finals.length - 1]);
+      if (lastKey) {
+        let kb = _byLastFinalKey.get(lastKey);
+        if (!kb) { kb = []; _byLastFinalKey.set(lastKey, kb); }
+        kb.push(id);
+      }
     }
   }
 }
