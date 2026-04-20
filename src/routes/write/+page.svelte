@@ -44,7 +44,12 @@
   /** Which paragraph is currently focused (candidates render only for
    *  this paragraph's anchors to save work). */
   let focusedParagraphId = $state<string | null>(null);
+  /** Legacy cross-chip final-key hover (used inside AnchorCard's
+   *  target-finals strip). */
   let hoveredKey = $state<string | null>(null);
+  /** Cross-anchor rhyme hover: when set, every anchor (in editor AND
+   *  panel) whose `rhymeKey` matches lights up. */
+  let hoveredRhymeKey = $state<string | null>(null);
   let draftsOpen = $state(false);
 
   // Keep paragraphs in sync with the selected draft.
@@ -108,16 +113,17 @@
   const paragraphAnchors = $derived.by<Record<string, GroupedAnchor[]>>(() => {
     const dict = dictSet; // force dep
     const out: Record<string, GroupedAnchor[]> = {};
+    // Shared rhymeKey → colorIdx so the same rhyme across paragraphs
+    // gets the same color (instead of each paragraph re-starting at
+    // colorIdx 0). Fed through assignRhymeGroups by reference —
+    // subsequent calls see keys added by prior calls.
+    const sharedColorMap = new Map<string, number>();
     for (const p of paragraphs) {
       const fresh = detectAutoAnchors(p.text, dict);
       const merged = mergeAutoAnchors(autoAnchorMemo[p.id] ?? [], fresh);
       const validatedManual = revalidateManualAnchors(p.text, p.manualAnchors);
-      // Keep auto anchors first (by lineIndex), then manual
       const combined = [...merged, ...validatedManual];
-      // Assign each anchor a rhyme-group id + color slot, and decide
-      // which ones get a dedicated candidate panel. Same-rhyme auto
-      // anchors after the first in a group become highlight-only.
-      out[p.id] = assignRhymeGroups(combined);
+      out[p.id] = assignRhymeGroups(combined, sharedColorMap);
     }
     return out;
   });
@@ -318,7 +324,7 @@
   <link rel="canonical" href="https://qianyangpeng.github.io/chinese-rhyme-finder/write/" />
 </svelte:head>
 
-<div class="mx-auto max-w-[80rem]">
+<div class="mx-auto max-w-[104rem]">
   <!-- Title bar -->
   <header class="flex items-baseline justify-between gap-3 px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
     <div class="min-w-0">
@@ -353,8 +359,11 @@
     </div>
   </header>
 
-  <!-- Grid: editor (left, flexible) + candidate panel (right, 22rem) -->
-  <div class="grid grid-cols-1 md:grid-cols-[1fr_22rem]">
+  <!-- Grid: editor takes 20–42rem, panel takes the rest of horizontal
+       space (no fixed 22rem width). On wide screens the panel shows
+       multiple anchors side-by-side via flex-wrap below; on narrow
+       screens the whole thing stacks. -->
+  <div class="grid grid-cols-1 md:grid-cols-[minmax(20rem,42rem)_1fr]">
     <!-- LEFT: paragraph stack -->
     <div class="md:border-r md:border-zinc-100 md:dark:border-zinc-800">
       {#each paragraphs as para, idx (para.id)}
@@ -365,10 +374,12 @@
           focused={focusedParagraphId === para.id}
           index={idx}
           startLine={paragraphStartLines[para.id] ?? 1}
+          hoveredRhymeKey={hoveredRhymeKey}
           onTextChange={(txt) => handleTextChange(para.id, txt)}
           onFocus={() => (focusedParagraphId = para.id)}
           onManualAnchorsChange={(manual) => handleManualAnchorsChange(para.id, manual)}
           onDelete={() => deleteParagraph(para.id)}
+          onHoverRhymeKey={(k) => (hoveredRhymeKey = k)}
         />
       {/each}
 
@@ -386,7 +397,7 @@
     <!-- RIGHT: candidate panel for focused paragraph -->
     <aside class="hidden md:block">
       {#if focusedParagraphId && panelAnchors.length > 0}
-        <div class="sticky top-0 bg-white dark:bg-zinc-950">
+        <div class="sticky top-0 max-h-screen overflow-y-auto bg-white dark:bg-zinc-950">
           <!-- Panel header -->
           <div class="flex items-baseline justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 px-3 py-2">
             <span class="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">
@@ -396,16 +407,18 @@
               {t(`${panelAnchors.length} 个锚点`, `${panelAnchors.length} anchors`)}
             </span>
           </div>
-          <!-- Anchors side by side, each a column. Panel-width (22rem)
-               fits one expanded column; additional ones scroll
-               horizontally. Clicking a column's ◀ button collapses it
-               to a 2.5rem strip so two or three can coexist. -->
-          <div class="flex overflow-x-auto">
+          <!-- Anchors flow in a multi-column wrap. Each column is ~14rem
+               when expanded or 2.5rem when collapsed, so however much
+               horizontal real estate the viewport gives, the panel
+               fills with multiple columns rather than horizontally
+               scrolling a single row. -->
+          <div class="flex flex-wrap items-start gap-2 p-2">
             {#each panelAnchors as anchor (anchor.id)}
               <AnchorCard
                 {anchor}
                 active={true}
                 hoveredKey={hoveredKey}
+                hoveredRhymeKey={hoveredRhymeKey}
                 onToneModeChange={(tm) => handleAnchorToneMode(focusedParagraphId ?? '', anchor.id, tm)}
                 onRemove={() => {
                   // Only manual anchors are removable via the panel.
@@ -419,6 +432,7 @@
                 }}
                 onInsertCandidate={insertIntoFocused}
                 onHoverKey={(k) => (hoveredKey = k)}
+                onHoverRhymeKey={(k) => (hoveredRhymeKey = k)}
               />
             {/each}
           </div>

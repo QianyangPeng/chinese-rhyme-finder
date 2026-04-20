@@ -35,6 +35,10 @@
      *  same-key chips across the whole page. */
     hoveredKey: string | null;
     onHoverKey: (key: string | null) => void;
+    /** Cross-anchor rhyme hover: any anchor whose rhymeKey matches
+     *  this value gets a boosted visual state. */
+    hoveredRhymeKey?: string | null;
+    onHoverRhymeKey?: (key: string | null) => void;
   }
   let {
     anchor,
@@ -43,7 +47,9 @@
     onRemove,
     onInsertCandidate,
     hoveredKey,
-    onHoverKey
+    onHoverKey,
+    hoveredRhymeKey = null,
+    onHoverRhymeKey = () => {}
   }: Props = $props();
 
   // ── Derive syllables + finals from anchor text ──────────────────
@@ -151,6 +157,12 @@
   // ── Rhyme-group colors (shared palette) ─────────────────────────
   const colors = $derived(rhymeColor(anchor.colorIdx));
 
+  // True if THIS anchor is part of the currently hovered rhyme group
+  // (hover originating from editor or another panel card).
+  const isRhymeHovered = $derived(
+    hoveredRhymeKey !== null && hoveredRhymeKey === anchor.rhymeKey
+  );
+
   // ── Horizontal collapse (spec point 2) ──────────────────────────
   /** When collapsed, the column shrinks to ~2.5rem so other anchors
    *  can fit side-by-side without scrolling. Click the narrow strip
@@ -165,72 +177,80 @@
   <!-- Narrow collapsed strip: colored bar + vertical anchor text + expand arrow. -->
   <!-- svelte-ignore a11y_consider_explicit_label -->
   <button
-    class="flex h-full min-h-[160px] flex-col items-center gap-2 border-r border-zinc-100 px-1 py-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/60"
-    style="width: 2.5rem; flex-shrink: 0; background: {colors.bg};"
+    class="flex min-h-[120px] flex-col items-center gap-2 rounded-md border border-zinc-200 px-1 py-2 text-left transition-shadow hover:border-sky-300 dark:border-zinc-700 dark:hover:border-sky-700"
+    style="width: 2.5rem; flex-shrink: 0; background: {colors.bg}; {isRhymeHovered ? `box-shadow: 0 0 0 2px ${colors.border};` : ''}"
     onclick={toggleCollapsed}
+    onmouseenter={() => onHoverRhymeKey(anchor.rhymeKey)}
+    onmouseleave={() => onHoverRhymeKey(null)}
     title={t(`展开「${anchor.text}」的候选`, `Expand candidates for ${anchor.text}`)}
   >
-    <span class="block h-8 w-1 rounded-full" style="background: {colors.border};"></span>
+    <span class="block h-6 w-1 rounded-full" style="background: {colors.border};"></span>
     <span
-      class="font-sans text-[14px] font-semibold"
+      class="font-sans text-[13px] font-semibold"
       style="writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 1px;"
     >{anchor.text}</span>
     <span class="text-[10px] text-zinc-400">▸</span>
   </button>
 {:else}
 <article
-  class="flex-shrink-0 border-r border-zinc-100 dark:border-zinc-800 text-xs"
-  style="width: 18rem;"
+  class="flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-white text-xs transition-shadow dark:border-zinc-700 dark:bg-zinc-900"
+  style="width: 14rem; {isRhymeHovered ? `box-shadow: 0 0 0 2px ${colors.border};` : ''}"
+  onmouseenter={() => onHoverRhymeKey(anchor.rhymeKey)}
+  onmouseleave={() => onHoverRhymeKey(null)}
 >
-  <!-- Header: colored left bar + anchor in matching box + pinyin + location + tone toggles + remove -->
+  <!-- Two-row header fits 14rem column:
+       row 1 = anchor box + compact controls
+       row 2 = pinyin (truncates) + location badge -->
   <header
-    class="flex items-center justify-between gap-2 px-3 py-2"
+    class="px-2 py-1.5"
     style="border-left: 4px solid {colors.border}; background: {colors.bg};"
   >
-    <div class="flex items-baseline gap-2 min-w-0">
+    <div class="flex items-center justify-between gap-1">
       <span
         class="font-sans text-[14px] font-semibold truncate"
-        style="border: 1.5px solid {colors.border}; border-radius: 4px; padding: 0 6px; background: {colors.bg};"
+        style="border: 1.5px solid {colors.border}; border-radius: 4px; padding: 0 5px; background: {colors.bg};"
       >{anchor.text}</span>
-      <span class="font-mono text-[10px] text-zinc-500 truncate">{syllables.map((s) => s.pinyinWithTone).join(' ')}</span>
+      <div class="flex shrink-0 items-center gap-0.5">
+        <button
+          class="rounded px-1 py-0 text-[10px] {anchor.toneMode === 'none'
+            ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+            : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+          title={t('只比韵母', 'Rhyme only')}
+          onclick={() => onToneModeChange('none')}
+        >{t('韵', 'R')}</button>
+        <button
+          class="rounded px-1 py-0 text-[10px] {anchor.toneMode === 'exact'
+            ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+            : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
+          title={t('韵母 + 声调', 'Rhyme + tone')}
+          onclick={() => onToneModeChange('exact')}
+        >{t('调', 'T')}</button>
+        <button
+          class="rounded p-0 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+          title={t('收起这个锚点', 'Collapse')}
+          onclick={toggleCollapsed}
+          aria-label={t('收起这个锚点', 'Collapse')}
+        >◀</button>
+        {#if !anchor.auto}
+          <button
+            class="rounded p-0 text-[12px] text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
+            title={t('删除这个锚点', 'Remove anchor')}
+            onclick={onRemove}
+            aria-label={t('删除这个锚点', 'Remove anchor')}
+          >×</button>
+        {/if}
+      </div>
+    </div>
+    <div class="mt-0.5 flex items-baseline justify-between gap-2 text-[9px] text-zinc-500">
+      <span class="font-mono truncate">{syllables.map((s) => s.pinyinWithTone).join(' ')}</span>
       {#if anchor.auto && anchor.lineIndex !== undefined}
-        <span class="shrink-0 text-[9px] text-zinc-500">
+        <span class="shrink-0">
           {t(`L${(anchor.lineIndex ?? 0) + 1} 尾`, `L${(anchor.lineIndex ?? 0) + 1}`)}
         </span>
       {:else if !anchor.auto}
-        <span class="shrink-0 text-[9px] text-zinc-500">
+        <span class="shrink-0">
           {t('手选', 'picked')}
         </span>
-      {/if}
-    </div>
-    <div class="flex shrink-0 items-center gap-1">
-      <button
-        class="rounded px-1.5 py-0.5 text-[10px] {anchor.toneMode === 'none'
-          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-          : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-        title={t('只比韵母', 'Rhyme only')}
-        onclick={() => onToneModeChange('none')}
-      >{t('韵', 'R')}</button>
-      <button
-        class="rounded px-1.5 py-0.5 text-[10px] {anchor.toneMode === 'exact'
-          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-          : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
-        title={t('韵母 + 声调', 'Rhyme + tone')}
-        onclick={() => onToneModeChange('exact')}
-      >{t('+调', '+T')}</button>
-      <button
-        class="rounded p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-        title={t('收起这个锚点', 'Collapse')}
-        onclick={toggleCollapsed}
-        aria-label={t('收起这个锚点', 'Collapse')}
-      >◀</button>
-      {#if !anchor.auto}
-        <button
-          class="rounded p-0.5 text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
-          title={t('删除这个锚点', 'Remove anchor')}
-          onclick={onRemove}
-          aria-label={t('删除这个锚点', 'Remove anchor')}
-        >×</button>
       {/if}
     </div>
   </header>

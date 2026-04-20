@@ -334,4 +334,57 @@ describe('applyOverlapReplace', () => {
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('new');
   });
+
+  it('single-word guard: replaces old when old is a dict word', () => {
+    // Text "呀土豆"; old anchor "土豆" (dict word); user selects "呀土"
+    const existing = [anchor('old', '土豆', 1, { auto: false })]; // [1,3]
+    const newA = anchor('new', '呀土', 0, { auto: false });       // [0,2]
+    const dict = new Set(['土豆']);
+    const out = applyOverlapReplace(existing, newA, (t) => dict.has(t));
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
+  });
+
+  it('single-word guard: rejects new when old is a user-composed phrase', () => {
+    // Text "我们降维打击吧"; old anchor "我们降维" (hand-composed, not a
+    // dict word); user selects "维打" which overlaps. Since old is
+    // multi-word, preserve it — the new add is rejected.
+    const existing = [anchor('composed', '我们降维', 0, { auto: false })]; // [0,4]
+    const newA = anchor('new', '维打', 3, { auto: false });                 // [3,5]
+    const dict = new Set(['降维打击', '打击', '我们']); // "我们降维" NOT in dict
+    const out = applyOverlapReplace(existing, newA, (t) => dict.has(t));
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('composed');
+  });
+
+  it('single-word guard: when ALL overlapping olds are single words, all are replaced', () => {
+    const e1 = anchor('e1', '土豆', 0, { auto: false }); // [0,2]
+    const e2 = anchor('e2', '薯条', 2, { auto: false }); // [2,4]
+    // e1 and e2 don't overlap each other but both overlap newA.
+    const newA = anchor('new', '土豆薯条', 0, { auto: false }); // [0,4]
+    const dict = new Set(['土豆', '薯条']);
+    const out = applyOverlapReplace([e1, e2], newA, (t) => dict.has(t));
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
+  });
+
+  it('single-word guard: mixed — one dict word + one phrase → rejects new (preserves phrase)', () => {
+    const e1 = anchor('e1', '土豆', 0, { auto: false });       // [0,2], in dict
+    const e2 = anchor('e2', '薯条的味道', 2, { auto: false }); // [2,7], NOT in dict
+    const newA = anchor('new', '豆薯条的', 1, { auto: false }); // [1,5], overlaps both
+    const dict = new Set(['土豆']); // only 土豆 is a "word"
+    const out = applyOverlapReplace([e1, e2], newA, (t) => dict.has(t));
+    // Since e2 is a non-dict phrase, reject the new add entirely.
+    // Both e1 and e2 survive.
+    expect(out).toHaveLength(2);
+    expect(out.map((a) => a.id).sort()).toEqual(['e1', 'e2']);
+  });
+
+  it('no single-word predicate → behaves like the original always-replace', () => {
+    const existing = [anchor('old', '这个短语', 0, { auto: false })];
+    const newA = anchor('new', '短语', 2, { auto: false });
+    const out = applyOverlapReplace(existing, newA); // default predicate
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
+  });
 });

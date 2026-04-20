@@ -60,6 +60,11 @@ export interface GroupedAnchor extends Anchor {
   readonly groupId: string;
   readonly colorIdx: number;
   readonly showsPanel: boolean;
+  /** Globally stable rhyme key (strictScheme key of last-syllable
+   *  final). Used for cross-paragraph hover-highlight: hovering any
+   *  anchor sets the page's hoveredRhymeKey, and every anchor with
+   *  the same rhymeKey lights up — even in other paragraphs. */
+  readonly rhymeKey: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -311,7 +316,15 @@ export function rhymeGroupKey(text: string): string {
  *
  * Returns a fresh array; input is not mutated.
  */
-export function assignRhymeGroups(anchors: readonly Anchor[]): GroupedAnchor[] {
+export function assignRhymeGroups(
+  anchors: readonly Anchor[],
+  /** Optional: a shared rhymeKey → colorIdx map used by the page to
+   *  keep colors consistent across paragraphs. New keys encountered
+   *  here are added to the map with the next available index so
+   *  subsequent paragraphs can reuse the same color for the same
+   *  rhyme. If omitted, colorIdx is assigned per-call starting at 0. */
+  sharedColorMap?: Map<string, number>
+): GroupedAnchor[] {
   // Step 1: walk a start-sorted copy to decide group membership. This
   // ensures the "first auto in group" has a deterministic meaning
   // (leftmost occurrence) regardless of input order.
@@ -327,16 +340,23 @@ export function assignRhymeGroups(anchors: readonly Anchor[]): GroupedAnchor[] {
     firstAutoId: string | null;
   }
   const byKey = new Map<string, GroupState>();
-  let nextColorIdx = 0;
-  const membership = new Map<string, { groupId: string; colorIdx: number; showsPanel: boolean }>();
+  const colorMap = sharedColorMap ?? new Map<string, number>();
+  const membership = new Map<
+    string,
+    { groupId: string; colorIdx: number; showsPanel: boolean; rhymeKey: string }
+  >();
 
   for (const a of sorted) {
     const key = rhymeGroupKey(a.text);
     let g = byKey.get(key);
     if (!g) {
-      g = { id: `g${nextColorIdx}`, colorIdx: nextColorIdx, firstAutoId: null };
+      let colorIdx = colorMap.get(key);
+      if (colorIdx === undefined) {
+        colorIdx = colorMap.size;
+        colorMap.set(key, colorIdx);
+      }
+      g = { id: `g${colorIdx}`, colorIdx, firstAutoId: null };
       byKey.set(key, g);
-      nextColorIdx++;
     }
 
     let showsPanel: boolean;
@@ -349,7 +369,12 @@ export function assignRhymeGroups(anchors: readonly Anchor[]): GroupedAnchor[] {
       showsPanel = false; // later auto in same group: highlight-only
     }
 
-    membership.set(a.id, { groupId: g.id, colorIdx: g.colorIdx, showsPanel });
+    membership.set(a.id, {
+      groupId: g.id,
+      colorIdx: g.colorIdx,
+      showsPanel,
+      rhymeKey: key
+    });
   }
 
   // Step 2: return in the caller's original order with group info
@@ -362,25 +387,44 @@ export function assignRhymeGroups(anchors: readonly Anchor[]): GroupedAnchor[] {
 }
 
 /**
- * Add a new manual anchor, replacing any existing manual anchors whose
- * range overlaps with it.
+ * Add a new manual anchor, deciding what to do with overlapping old
+ * manual anchors based on whether each old one is a "single word".
  *
- * User-facing semantics (spec §6.2):
- *   "If the newly selected range contains / overlaps with a word that
- *    is already on the rhyme list, the new selection replaces the old."
+ * User rule (2026-04-20 addendum):
+ *   "If the new anchor overlaps an old one AND the old is a single
+ *    word, delete the old (keep the new). Otherwise don't lose the
+ *    user-composed old anchor."
  *
- * Rule: an existing anchor is removed iff its range has non-empty
- * intersection with `[newAnchor.start, newAnchor.end)`. Touching at
- * an endpoint (existing.end === newAnchor.start, or existing.start
- * === newAnchor.end) is NOT an overlap — those anchors survive.
+ * Single-word check uses `isSingleWord(text)` — typically the caller
+ * passes `(t) => dictSet.has(t)` so anything the dictionary recognizes
+ * as a lexical word ("土豆", "岁月静好", 成语s, cedict entries) counts.
+ * Anchors NOT in the dictionary (hand-composed phrases like "呀土豆"
+ * or "这个降维打击") are treated as "multi-word" and preserved even
+ * when a new selection overlaps them; the new anchor is rejected in
+ * that case so the user's composition stays intact.
  *
- * Auto anchors are not considered here; they're re-detected from the
- * paragraph text on each render cycle.
+ * If `isSingleWord` is omitted (or always returns true), this degrades
+ * to the original always-replace behavior, which is what existing
+ * tests and v1 ParagraphCard relied on.
+ *
+ * Endpoint-touching is NOT an overlap: existing anchor with
+ * end === newAnchor.start (or start === newAnchor.end) survives.
  */
 export function applyOverlapReplace(
   existingManuals: readonly Anchor[],
-  newAnchor: Anchor
+  newAnchor: Anchor,
+  isSingleWord: (text: string) => boolean = () => true
 ): Anchor[] {
+  const overlapping = existingManuals.filter(
+    (a) => !(a.end <= newAnchor.start || a.start >= newAnchor.end)
+  );
+  // If any overlapping old is NOT a single word, reject the new add
+  // entirely — user's hand-composed phrase is preserved.
+  const hasMultiWordOverlap = overlapping.some((a) => !isSingleWord(a.text));
+  if (hasMultiWordOverlap) {
+    return existingManuals.slice();
+  }
+  // All overlapping olds are single words → replace them with the new.
   const survivors = existingManuals.filter(
     (a) => a.end <= newAnchor.start || a.start >= newAnchor.end
   );

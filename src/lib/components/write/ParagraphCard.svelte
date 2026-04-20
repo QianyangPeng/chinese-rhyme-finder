@@ -13,6 +13,7 @@
   import type { Anchor, GroupedAnchor } from '$lib/core/write/anchors';
   import { makeManualAnchor, applyOverlapReplace } from '$lib/core/write/anchors';
   import { rhymeColor } from '$lib/util/rhymeColors';
+  import { searchClient } from '$lib/workers/searchClient.svelte';
   import { t } from '$lib/stores/lang.svelte';
 
   // ── HTML escaping for overlay rendering ─────────────────────────
@@ -29,6 +30,10 @@
    * colored `<span class="anchor-box">` elements. Uses paragraph-wide
    * offsets to align anchors to the line-local substring.
    *
+   * When `hoveredKey` matches the anchor's rhymeKey, the span gets a
+   * boosted style (thicker border + a soft outer halo) so all anchors
+   * in the same rhyme group visually "light up" together.
+   *
    * Only called for the overlay; produces transparent-text visuals.
    * Anchors that start before or extend past this line are clipped to
    * this line's [lineStart, lineEnd) range.
@@ -36,7 +41,8 @@
   function renderLineHtml(
     lineText: string,
     lineStart: number,
-    lineAnchors: readonly GroupedAnchor[]
+    lineAnchors: readonly GroupedAnchor[],
+    hoveredKey: string | null
   ): string {
     const lineEnd = lineStart + lineText.length;
     const relevant = lineAnchors
@@ -44,7 +50,7 @@
       .sort((a, b) => a.start - b.start);
 
     if (relevant.length === 0) {
-      return escapeHtml(lineText) || '&nbsp;'; // empty line needs content to hold its height
+      return escapeHtml(lineText) || '&nbsp;';
     }
 
     let out = '';
@@ -52,11 +58,15 @@
     for (const a of relevant) {
       const s = Math.max(0, a.start - lineStart);
       const e = Math.min(lineText.length, a.end - lineStart);
-      if (s < cursor) continue; // anchor overlaps previous; skip (v1 — P4 overlap replace will prevent this)
+      if (s < cursor) continue;
       if (s > cursor) out += escapeHtml(lineText.slice(cursor, s));
       const colors = rhymeColor(a.colorIdx);
+      const isHov = hoveredKey !== null && a.rhymeKey === hoveredKey;
+      const shadow = isHov
+        ? `inset 0 0 0 2.5px ${colors.border}, 0 0 0 2px ${colors.border}55`
+        : `inset 0 0 0 1.5px ${colors.border}`;
       out +=
-        `<span class="anchor-box" style="box-shadow: inset 0 0 0 1.5px ${colors.border}; background: ${colors.bg}; border-radius: 4px;">` +
+        `<span class="anchor-box" data-rhyme-key="${escapeHtml(a.rhymeKey)}" style="box-shadow: ${shadow}; background: ${colors.bg}; border-radius: 4px;">` +
         escapeHtml(lineText.slice(s, e)) +
         '</span>';
       cursor = e;
@@ -76,14 +86,20 @@
     /** 0-based index — picks a color slot for the paragraph bar. */
     index: number;
     /** 1-based absolute line number for this paragraph's first line.
-     *  Line numbers continue across paragraphs (e.g., if paragraph 1
-     *  has 4 lines, paragraph 2's startLine is 5). */
+     *  Line numbers continue across paragraphs. */
     startLine?: number;
+    /** Globally-shared rhyme key currently being hovered (by any
+     *  paragraph or panel card). Anchors with a matching rhymeKey
+     *  get a boosted style in the overlay. */
+    hoveredRhymeKey?: string | null;
 
     onTextChange: (text: string) => void;
     onFocus: () => void;
     onManualAnchorsChange: (anchors: Anchor[]) => void;
     onDelete: () => void;
+    /** Called with the rhymeKey the mouse is currently over (or null
+     *  when the mouse leaves all anchor ranges). */
+    onHoverRhymeKey?: (key: string | null) => void;
   }
   let {
     paragraphId,
@@ -92,10 +108,12 @@
     focused,
     index,
     startLine = 1,
+    hoveredRhymeKey = null,
     onTextChange,
     onFocus,
     onManualAnchorsChange,
-    onDelete
+    onDelete,
+    onHoverRhymeKey = () => {}
   }: Props = $props();
 
   // ── Selection tracking (for "+ add anchor" button) ─────────────
@@ -124,11 +142,19 @@
   function addAnchorFromSelection() {
     const newAnchor = makeManualAnchor(text, selStart, selEnd, 'exact');
     if (!newAnchor) return;
-    // Overlap-replace: any existing MANUAL anchor whose range overlaps
-    // with the new selection is dropped. Auto anchors are untouched —
-    // they re-derive from text each cycle.
+    // Overlap-replace with single-word guard (addendum §3): if an
+    // overlapping old manual anchor is a dictionary word, it's freely
+    // replaced. If it's a hand-composed phrase (not in the dictionary),
+    // the new add is rejected so the user's explicit composition
+    // survives. Auto anchors are untouched — they re-derive each cycle.
     const existingManuals = anchors.filter((a) => !a.auto);
-    onManualAnchorsChange(applyOverlapReplace(existingManuals, newAnchor));
+    const isSingleWord = (text: string) =>
+      searchClient.dictSet.size === 0 /* not ready yet → permissive */
+        ? true
+        : searchClient.dictSet.has(text);
+    onManualAnchorsChange(
+      applyOverlapReplace(existingManuals, newAnchor, isSingleWord)
+    );
   }
 
   // ── Paragraph-identity color bar (reuses rhyme palette) ─────────
@@ -168,6 +194,26 @@
   function syncScroll() {
     if (!overlayEl || !textareaEl) return;
     overlayEl.scrollLeft = textareaEl.scrollLeft;
+  }
+
+  // Hover-over-anchor detection. Textarea is on top (z=1) so it
+  // receives mousemove; we hit-test against the overlay's anchor-box
+  // spans by their bounding rects (no char-width math needed).
+  function onTextareaMouseMove(e: MouseEvent) {
+    if (!overlayEl) { onHoverRhymeKey(null); return; }
+    const spans = overlayEl.querySelectorAll<HTMLSpanElement>('.anchor-box');
+    for (const span of spans) {
+      const r = span.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        const key = span.getAttribute('data-rhyme-key');
+        onHoverRhymeKey(key);
+        return;
+      }
+    }
+    onHoverRhymeKey(null);
+  }
+  function onTextareaMouseLeave() {
+    onHoverRhymeKey(null);
   }
 </script>
 
@@ -252,7 +298,7 @@
               <div
                 class="decor-line"
                 class:decor-line-alt={i % 2 === 1}
-              >{@html renderLineHtml(line.text, line.start, anchors)}</div>
+              >{@html renderLineHtml(line.text, line.start, anchors, hoveredRhymeKey)}</div>
             {/each}
           </div>
 
@@ -266,6 +312,8 @@
             onselect={trackSelection}
             onfocus={onFocus}
             onscroll={syncScroll}
+            onmousemove={onTextareaMouseMove}
+            onmouseleave={onTextareaMouseLeave}
             placeholder={t('在这里写…', 'Write here…')}
             rows={lineCount}
             spellcheck="false"
