@@ -6,6 +6,7 @@ import {
   revalidateManualAnchors,
   assignRhymeGroups,
   rhymeGroupKey,
+  applyOverlapReplace,
   type Anchor
 } from './anchors.js';
 
@@ -274,5 +275,63 @@ describe('assignRhymeGroups', () => {
     ];
     const out = assignRhymeGroups(input);
     expect(out.map((a) => a.id)).toEqual(['third', 'first', 'second']);
+  });
+});
+
+describe('applyOverlapReplace', () => {
+  it('adds a non-overlapping anchor without removing others', () => {
+    const existing = [anchor('a', '叫好', 0, { auto: false })]; // [0,2]
+    const newA = anchor('b', '华丽', 10, { auto: false });        // [10,12]
+    const out = applyOverlapReplace(existing, newA);
+    expect(out).toHaveLength(2);
+    expect(out.map((a) => a.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('replaces an anchor whose range is fully contained by the new one', () => {
+    const existing = [anchor('old', '打击', 6, { auto: false })]; // [6,8]
+    const newA = anchor('new', '降维打击', 4, { auto: false });    // [4,8]
+    const out = applyOverlapReplace(existing, newA);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
+  });
+
+  it('replaces an existing anchor that contains the new one (shrink)', () => {
+    const existing = [anchor('big', '降维打击', 4, { auto: false })]; // [4,8]
+    const newA = anchor('small', '打击', 6, { auto: false });          // [6,8]
+    const out = applyOverlapReplace(existing, newA);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('small');
+  });
+
+  it('replaces multiple overlapping anchors at once', () => {
+    const e1 = anchor('e1', '降维', 4, { auto: false }); // [4,6]
+    const e2 = anchor('e2', '打击', 6, { auto: false }); // [6,8]
+    const newA = anchor('new', '降维打击', 4, { auto: false }); // [4,8] covers both
+    const out = applyOverlapReplace([e1, e2], newA);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
+  });
+
+  it('keeps touching-but-not-overlapping anchors (endpoint equality is not overlap)', () => {
+    const e = anchor('e', '降维', 4, { auto: false }); // [4,6]
+    const newA = anchor('new', '打击', 6, { auto: false }); // [6,8] touches at 6
+    const out = applyOverlapReplace([e], newA);
+    expect(out).toHaveLength(2);
+  });
+
+  it('handles partial overlap: replaces the overlapping one', () => {
+    const existing = [anchor('e', '心情', 3, { auto: false })]; // [3,5]
+    const newA = anchor('new', '情人', 4, { auto: false });      // [4,6]
+    const out = applyOverlapReplace(existing, newA);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
+  });
+
+  it('same-range add replaces (idempotent net effect)', () => {
+    const existing = [anchor('old', '打击', 6, { auto: false })];
+    const newA = anchor('new', '打击', 6, { auto: false });
+    const out = applyOverlapReplace(existing, newA);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('new');
   });
 });

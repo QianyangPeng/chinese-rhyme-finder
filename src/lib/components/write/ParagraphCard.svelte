@@ -11,7 +11,7 @@
    * it needs direct access to the textarea's selectionStart/End.
    */
   import type { Anchor, GroupedAnchor } from '$lib/core/write/anchors';
-  import { makeManualAnchor } from '$lib/core/write/anchors';
+  import { makeManualAnchor, applyOverlapReplace } from '$lib/core/write/anchors';
   import { rhymeColor } from '$lib/util/rhymeColors';
   import { t } from '$lib/stores/lang.svelte';
 
@@ -119,15 +119,11 @@
   function addAnchorFromSelection() {
     const newAnchor = makeManualAnchor(text, selStart, selEnd, 'exact');
     if (!newAnchor) return;
-    // v1 dedup only; P4 will add overlap-replace.
-    const already = anchors.some(
-      (a) => !a.auto && a.start === newAnchor.start && a.end === newAnchor.end
-    );
-    if (already) return;
-    onManualAnchorsChange([
-      ...anchors.filter((a) => !a.auto),
-      newAnchor
-    ]);
+    // Overlap-replace: any existing MANUAL anchor whose range overlaps
+    // with the new selection is dropped. Auto anchors are untouched —
+    // they re-derive from text each cycle.
+    const existingManuals = anchors.filter((a) => !a.auto);
+    onManualAnchorsChange(applyOverlapReplace(existingManuals, newAnchor));
   }
 
   // ── Paragraph-identity color bar (reuses rhyme palette) ─────────

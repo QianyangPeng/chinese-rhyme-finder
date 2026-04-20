@@ -362,6 +362,32 @@ export function assignRhymeGroups(anchors: readonly Anchor[]): GroupedAnchor[] {
 }
 
 /**
+ * Add a new manual anchor, replacing any existing manual anchors whose
+ * range overlaps with it.
+ *
+ * User-facing semantics (spec §6.2):
+ *   "If the newly selected range contains / overlaps with a word that
+ *    is already on the rhyme list, the new selection replaces the old."
+ *
+ * Rule: an existing anchor is removed iff its range has non-empty
+ * intersection with `[newAnchor.start, newAnchor.end)`. Touching at
+ * an endpoint (existing.end === newAnchor.start, or existing.start
+ * === newAnchor.end) is NOT an overlap — those anchors survive.
+ *
+ * Auto anchors are not considered here; they're re-detected from the
+ * paragraph text on each render cycle.
+ */
+export function applyOverlapReplace(
+  existingManuals: readonly Anchor[],
+  newAnchor: Anchor
+): Anchor[] {
+  const survivors = existingManuals.filter(
+    (a) => a.end <= newAnchor.start || a.start >= newAnchor.end
+  );
+  return [...survivors, newAnchor];
+}
+
+/**
  * After the paragraph text changes, re-validate manual anchors:
  *   - If the anchor's [start,end] still matches its text exactly →
  *     keep with same offsets (no-op edit).
