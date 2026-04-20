@@ -318,14 +318,14 @@
   }
 
   /* Subtle zebra — visible in both themes without competing with the
-     anchor boxes. */
+     anchor boxes. Class-based (`:global(.dark)`) so it tracks the
+     site's theme toggle (Tailwind `darkMode: 'class'`), not the OS
+     preference. */
   .decor-line-alt {
     background: rgba(245, 158, 11, 0.035);
   }
-  @media (prefers-color-scheme: dark) {
-    .decor-line-alt {
-      background: rgba(245, 158, 11, 0.05);
-    }
+  :global(.dark) .decor-line-alt {
+    background: rgba(245, 158, 11, 0.05);
   }
 
   .editor-textarea {
@@ -339,15 +339,15 @@
     resize: none;
     overflow-x: auto;
     overflow-y: hidden;
-    color: rgb(24, 24, 27);
+    color: rgb(24, 24, 27); /* zinc-900 */
+    caret-color: rgb(24, 24, 27);
   }
-  @media (prefers-color-scheme: dark) {
-    .editor-textarea {
-      color: rgb(244, 244, 245);
-    }
+  :global(.dark) .editor-textarea {
+    color: rgb(244, 244, 245); /* zinc-100 */
+    caret-color: rgb(244, 244, 245);
   }
   .editor-textarea::placeholder {
-    color: rgb(161, 161, 170);
+    color: rgb(161, 161, 170); /* zinc-400 */
   }
 
   /* Anchor box visuals: inline box-shadow (doesn't affect layout) +
