@@ -14,6 +14,26 @@ import { matchFullKeys, matchTailKeys, type RhymeMatch } from '../rhyme/matcher.
 import { composeKey, type ToneMode } from '../rhyme/tone.js';
 import type { Tone } from '../pinyin/types.js';
 
+/**
+ * Return true if the phrase's jieba segments mark it as a proper noun
+ * (person / place / organization / other name). We penalize these in
+ * the sort so transliterated names like 博比/莫莉 from movie subtitles
+ * don't crowd out common words like 作弊/躲避 for songwriting users.
+ *
+ * POS codes: nr* = person, ns = place, nt = organization, nz = other proper.
+ */
+function isProperNoun(phrase: PhraseRecord): boolean {
+  const segs = phrase.segments;
+  if (!segs || segs.length === 0) return false;
+  for (const s of segs) {
+    const pos = s.pos ?? '';
+    if (pos.startsWith('nr') || pos === 'ns' || pos === 'nt' || pos === 'nz') {
+      return true;
+    }
+  }
+  return false;
+}
+
 export interface SearchHit {
   /** The matched phrase. */
   readonly phrase: PhraseRecord;
@@ -254,14 +274,18 @@ export function searchByFinals(
     const bucket = buckets[level];
     if (bucket.length === 0) continue;
 
-    // Sort within a level by a length-tier + quality + alphabetical key.
+    // Sort within a level by a length-tier + POS + quality + text key.
     //
     //   tier 0 — same length as target (most on-point; positional rhyme)
     //   tier 1 — SHORTER than target (perfect tail rhyme of M/N chars —
     //            still a clean rhyme pair like "岁月静好 ↔ 青岛")
-    //   tier 2 — LONGER than target (the target rhymes inside the candidate)
+    //   tier 2 — LONGER than target (target rhymes inside the candidate)
     //
-    // Within a tier: higher quality first, then alphabetical for stability.
+    // Inside a tier: non-proper-noun first, then quality desc. Proper
+    // nouns (transliterated names like 莫莉/博比 from OpenSubtitles with
+    // q=1.0) would otherwise drown out genuine common words (作弊/躲避
+    // from CEDICT with q=0.82). Rappers/lyricists want common vocab at
+    // the top of the list — names can be a second page.
     bucket.sort((a, b) => {
       const aTier = a.phrase.length === targetLength ? 0
         : a.phrase.length < targetLength ? 1
@@ -270,6 +294,9 @@ export function searchByFinals(
         : b.phrase.length < targetLength ? 1
         : 2;
       if (aTier !== bTier) return aTier - bTier;
+      const aProper = isProperNoun(a.phrase) ? 1 : 0;
+      const bProper = isProperNoun(b.phrase) ? 1 : 0;
+      if (aProper !== bProper) return aProper - bProper;
       if (b.phrase.quality !== a.phrase.quality) {
         return b.phrase.quality - a.phrase.quality;
       }
