@@ -221,26 +221,26 @@
       >{anchor.text}</span>
       <div class="flex shrink-0 items-center gap-0.5">
         <button
-          class="rounded px-1 py-0 text-[10px] {anchor.toneMode === 'none'
+          class="rounded px-1.5 py-0 text-[10px] {anchor.toneMode === 'none'
             ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
             : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
           title={t('只比韵母', 'Rhyme only')}
           onclick={() => onToneModeChange('none')}
-        >{t('韵', 'R')}</button>
+        >{t('韵母', 'Rhyme')}</button>
         <button
-          class="rounded px-1 py-0 text-[10px] {anchor.toneMode === 'exact'
+          class="rounded px-1.5 py-0 text-[10px] {anchor.toneMode === 'exact'
             ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
             : 'border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800'}"
           title={t('韵母 + 声调', 'Rhyme + tone')}
           onclick={() => onToneModeChange('exact')}
-        >{t('调', 'T')}</button>
+        >{t('+声调', '+Tone')}</button>
         {#if !anchor.auto}
           <button
-            class="rounded p-0 text-[12px] text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
+            class="rounded px-1 py-0 text-[10px] text-zinc-500 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
             title={t('删除这个锚点', 'Remove anchor')}
             onclick={onRemove}
             aria-label={t('删除这个锚点', 'Remove anchor')}
-          >×</button>
+          >{t('删除', 'Remove')}</button>
         {/if}
       </div>
     </div>

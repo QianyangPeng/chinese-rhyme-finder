@@ -135,11 +135,17 @@
   });
 
   // Write the merged auto-anchors back to the memo so next diff reuses IDs.
+  // IMPORTANT: only memoize auto-TAILS, not echoes. Echoes get a fresh
+  // uid() on every derivation — if we stored them in the memo, the
+  // diff below always "changed", the memo always got written, the
+  // derivation re-ran, new echoes, … → Svelte threw
+  // `effect_update_depth_exceeded`. Excluding `a.echo` keeps the
+  // memo stable across renders.
   $effect(() => {
     const dict = dictSet; void dict; // dep
     const newMemo: Record<string, Anchor[]> = {};
     for (const p of paragraphs) {
-      newMemo[p.id] = (paragraphAnchors[p.id] ?? []).filter((a) => a.auto);
+      newMemo[p.id] = (paragraphAnchors[p.id] ?? []).filter((a) => a.auto && !a.echo);
     }
     // Only update if actually different (avoid infinite loop).
     let changed = false;
