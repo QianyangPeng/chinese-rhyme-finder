@@ -47,6 +47,15 @@ export interface Anchor {
   readonly auto: boolean;
   /** For auto anchors: which line (0-based) of the paragraph it anchors. */
   readonly lineIndex?: number;
+  /**
+   * True if this anchor is an "echo" — a mid-line dict word that
+   * happens to rhyme with some other already-detected anchor. Echoes
+   * are visual-only (their color bubbles up in the editor) and never
+   * occupy a slot in the candidate panel, regardless of whether they
+   * are first-in-group by start offset. `auto` is also true for
+   * echoes; `echo` just disambiguates for the panel logic.
+   */
+  readonly echo?: boolean;
 }
 
 /**
@@ -275,6 +284,92 @@ export function makeManualAnchor(
   };
 }
 
+// ── Mid-line rhyme echoes ──────────────────────────────────────────
+
+/**
+ * Find mid-line dict words whose rhyme key matches any of the given
+ * "seed" anchors' rhyme keys. These echo anchors let the user see the
+ * full rhyme pattern in a paragraph without having to manually select
+ * every rhyming word.
+ *
+ * Example (user screenshot 2026-04-20):
+ *   Text contains "…的相对华丽" (L1), "…姜维的戏" (L3),
+ *   "…降维打击" (L4). L1's tail anchor 华丽 (i) and manual anchor
+ *   相对 (uei) are the seeds. 姜维 and 降维 (both uei dict words
+ *   sitting mid-line) get echoed with the same color as 相对.
+ *
+ * Rules:
+ *   - Scan each line left→right, maximal-match against the dict at
+ *     each position (4, 3, 2 chars).
+ *   - Skip words that overlap any existing anchor (so we don't
+ *     double-highlight the tail word or a manual's range).
+ *   - Include a match iff its rhymeGroupKey matches one of the seed
+ *     rhyme keys.
+ *   - Yielded anchors have `auto: true, echo: true`. Caller merges
+ *     them into the anchor list; assignRhymeGroups will NOT let them
+ *     take a panel slot.
+ */
+export function detectEchoAnchors(
+  paragraphText: string,
+  dict: Set<string>,
+  seedAnchors: readonly Anchor[]
+): Anchor[] {
+  if (seedAnchors.length === 0 || dict.size === 0) return [];
+
+  // Active rhyme keys from the seeds.
+  const activeKeys = new Set<string>();
+  for (const s of seedAnchors) activeKeys.add(rhymeGroupKey(s.text));
+  if (activeKeys.size === 0) return [];
+
+  // Coverage ranges of existing anchors (half-open [start, end)).
+  const covered: Array<[number, number]> = seedAnchors.map((a) => [a.start, a.end]);
+  function hasOverlap(s: number, e: number): boolean {
+    for (const [cs, ce] of covered) {
+      if (!(e <= cs || s >= ce)) return true;
+    }
+    return false;
+  }
+
+  const echoes: Anchor[] = [];
+  const lines = paragraphText.split('\n');
+  let lineOffset = 0;
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    let i = 0;
+    while (i < line.length) {
+      let advanced = false;
+      // Try longest-match first.
+      for (const k of [4, 3, 2]) {
+        if (i + k > line.length) continue;
+        const word = line.slice(i, i + k);
+        if (!/^[\u4e00-\u9fff\u3400-\u4dbf]+$/.test(word)) continue;
+        if (!dict.has(word)) continue;
+        const start = lineOffset + i;
+        const end = start + k;
+        if (hasOverlap(start, end)) continue;
+        if (!activeKeys.has(rhymeGroupKey(word))) continue;
+        // Add echo and skip past it.
+        echoes.push({
+          id: uid(),
+          text: word,
+          start,
+          end,
+          toneMode: 'exact',
+          auto: true,
+          echo: true,
+          lineIndex: li
+        });
+        i += k;
+        advanced = true;
+        break;
+      }
+      if (!advanced) i++;
+    }
+    lineOffset += line.length + 1; // +1 for the newline
+  }
+  return echoes;
+}
+
 // ── Rhyme-group assignment ─────────────────────────────────────────
 
 /**
@@ -360,13 +455,15 @@ export function assignRhymeGroups(
     }
 
     let showsPanel: boolean;
-    if (!a.auto) {
+    if (a.echo) {
+      showsPanel = false; // echoes are highlight-only, never panel reps
+    } else if (!a.auto) {
       showsPanel = true; // manual always shows
     } else if (g.firstAutoId === null) {
       g.firstAutoId = a.id;
-      showsPanel = true; // first auto in group shows
+      showsPanel = true; // first auto TAIL in group shows
     } else {
-      showsPanel = false; // later auto in same group: highlight-only
+      showsPanel = false; // later auto tail in same group: highlight-only
     }
 
     membership.set(a.id, {

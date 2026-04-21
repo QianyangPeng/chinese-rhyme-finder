@@ -18,6 +18,7 @@
     mergeAutoAnchors,
     revalidateManualAnchors,
     assignRhymeGroups,
+    detectEchoAnchors,
     type Anchor,
     type GroupedAnchor,
     type ToneMode
@@ -122,8 +123,13 @@
       const fresh = detectAutoAnchors(p.text, dict);
       const merged = mergeAutoAnchors(autoAnchorMemo[p.id] ?? [], fresh);
       const validatedManual = revalidateManualAnchors(p.text, p.manualAnchors);
-      const combined = [...merged, ...validatedManual];
-      out[p.id] = assignRhymeGroups(combined, sharedColorMap);
+      const seeds = [...merged, ...validatedManual];
+      // Echo pass: scan mid-line dict words whose rhyme matches any
+      // seed anchor's rhyme. Lets the user see the full rhyme pattern
+      // (e.g., 相对 / 姜维 / 降维 all in uei) without having to hand-
+      // select every mid-line rhyme.
+      const echoes = detectEchoAnchors(p.text, dict, seeds);
+      out[p.id] = assignRhymeGroups([...seeds, ...echoes], sharedColorMap);
     }
     return out;
   });
@@ -397,7 +403,7 @@
     <!-- RIGHT: candidate panel for focused paragraph -->
     <aside class="hidden md:block">
       {#if focusedParagraphId && panelAnchors.length > 0}
-        <div class="sticky top-0 max-h-screen overflow-y-auto bg-white dark:bg-zinc-950">
+        <div class="sticky top-0 bg-white dark:bg-zinc-950">
           <!-- Panel header -->
           <div class="flex items-baseline justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 px-3 py-2">
             <span class="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">

@@ -193,11 +193,19 @@
   </button>
 {:else}
 <article
-  class="flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-white text-xs transition-shadow dark:border-zinc-700 dark:bg-zinc-900"
+  class="group relative flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-white text-xs transition-shadow dark:border-zinc-700 dark:bg-zinc-900"
   style="width: 14rem; {isRhymeHovered ? `box-shadow: 0 0 0 2px ${colors.border};` : ''}"
   onmouseenter={() => onHoverRhymeKey(anchor.rhymeKey)}
   onmouseleave={() => onHoverRhymeKey(null)}
 >
+  <!-- Collapse button on the right edge — visible only on card hover,
+       takes up a thin vertical strip so it doesn't steal header space. -->
+  <button
+    class="absolute right-0 top-0 bottom-0 z-10 hidden w-4 items-center justify-center text-[11px] text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 group-hover:flex dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+    title={t('收起这个锚点', 'Collapse')}
+    onclick={toggleCollapsed}
+    aria-label={t('收起这个锚点', 'Collapse')}
+  >◀</button>
   <!-- Two-row header fits 14rem column:
        row 1 = anchor box + compact controls
        row 2 = pinyin (truncates) + location badge -->
@@ -225,12 +233,6 @@
           title={t('韵母 + 声调', 'Rhyme + tone')}
           onclick={() => onToneModeChange('exact')}
         >{t('调', 'T')}</button>
-        <button
-          class="rounded p-0 text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          title={t('收起这个锚点', 'Collapse')}
-          onclick={toggleCollapsed}
-          aria-label={t('收起这个锚点', 'Collapse')}
-        >◀</button>
         {#if !anchor.auto}
           <button
             class="rounded p-0 text-[12px] text-zinc-400 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
@@ -255,8 +257,10 @@
     </div>
   </header>
 
-  <!-- Body container with small side padding -->
-  <div class="px-3 py-2">
+  <!-- Body container. max-h + overflow-y so each anchor's candidate
+       list scrolls INSIDE the card — avoids forcing the whole page
+       to scroll when a card has many levels / chips. -->
+  <div class="px-2 py-2 overflow-y-auto" style="max-height: 60vh;">
 
   <!-- Target finals chips -->
   {#if targetFinals.length > 0}

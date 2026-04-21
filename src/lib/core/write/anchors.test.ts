@@ -7,6 +7,7 @@ import {
   assignRhymeGroups,
   rhymeGroupKey,
   applyOverlapReplace,
+  detectEchoAnchors,
   type Anchor
 } from './anchors.js';
 
@@ -386,5 +387,83 @@ describe('applyOverlapReplace', () => {
     const out = applyOverlapReplace(existing, newA); // default predicate
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('new');
+  });
+});
+
+describe('detectEchoAnchors', () => {
+  // Dict covering the words we care about. rhymeGroupKey:
+  //   相对 → uei, 姜维 → uei, 降维 → uei, 华丽 → i,
+  //   打击 → i, 同龄 → ing, 糟糕 → ao
+  const DICT = new Set([
+    '相对', '姜维', '降维', '华丽', '打击', '同龄', '糟糕'
+  ]);
+
+  it("echoes mid-line dict words that rhyme with a seed's rhyme key", () => {
+    // Paragraph: L1 has a manual anchor 相对 (uei) + an auto-tail
+    // 华丽 (i). L3 has 姜维 mid-line (not a tail). Echo should find
+    // 姜维 as a uei rhyme match.
+    const text = '有个相对的华丽\n没有押\n看不懂姜维的戏';
+    const seeds: Anchor[] = [
+      // manual 相对 at offset 2 in line 0
+      { id: 'm1', text: '相对', start: 2, end: 4, toneMode: 'exact', auto: false },
+      // auto tail 华丽 at offset 5 in line 0
+      { id: 'a1', text: '华丽', start: 5, end: 7, toneMode: 'exact', auto: true, lineIndex: 0 }
+    ];
+    const echoes = detectEchoAnchors(text, DICT, seeds);
+    expect(echoes.length).toBeGreaterThanOrEqual(1);
+    const texts = echoes.map((e) => e.text);
+    expect(texts).toContain('姜维');
+    // All echoes should be flagged echo=true, auto=true
+    for (const e of echoes) {
+      expect(e.echo).toBe(true);
+      expect(e.auto).toBe(true);
+    }
+  });
+
+  it('does not echo words that overlap an existing anchor', () => {
+    // If 相对 is already a seed, don't re-emit 相对 as an echo.
+    const text = '有个相对的戏';
+    const seeds: Anchor[] = [
+      { id: 'm1', text: '相对', start: 2, end: 4, toneMode: 'exact', auto: false }
+    ];
+    const echoes = detectEchoAnchors(text, DICT, seeds);
+    expect(echoes.map((e) => e.text)).not.toContain('相对');
+  });
+
+  it('does not echo when no seeds are provided', () => {
+    const text = '有个相对的华丽';
+    const echoes = detectEchoAnchors(text, DICT, []);
+    expect(echoes).toEqual([]);
+  });
+
+  it('does not echo words whose rhyme is not among seed rhymes', () => {
+    // Only "ao" is seeded; uei words in the text should NOT be echoed.
+    const text = '一个相对的糟糕\n还有个姜维';
+    const seeds: Anchor[] = [
+      { id: 's', text: '糟糕', start: 5, end: 7, toneMode: 'exact', auto: true, lineIndex: 0 }
+    ];
+    const echoes = detectEchoAnchors(text, DICT, seeds);
+    // 相对 and 姜维 are uei — not matching ao seed.
+    expect(echoes).toEqual([]);
+  });
+
+  it("assignRhymeGroups: echoes never show the panel, even if first-in-group", () => {
+    // Build a group where an echo comes FIRST (by start offset) but
+    // must still not take the panel slot.
+    const echoFirst: Anchor = {
+      id: 'echo', text: '姜维', start: 0, end: 2,
+      toneMode: 'exact', auto: true, echo: true, lineIndex: 0
+    };
+    const autoTail: Anchor = {
+      id: 'tail', text: '相对', start: 10, end: 12,
+      toneMode: 'exact', auto: true, lineIndex: 1
+    };
+    const grouped = assignRhymeGroups([echoFirst, autoTail]);
+    const gEcho = grouped.find((a) => a.id === 'echo')!;
+    const gTail = grouped.find((a) => a.id === 'tail')!;
+    expect(gEcho.showsPanel).toBe(false); // echoes never
+    expect(gTail.showsPanel).toBe(true);  // first NON-echo auto
+    // Same group (both uei), same colorIdx
+    expect(gEcho.groupId).toBe(gTail.groupId);
   });
 });
