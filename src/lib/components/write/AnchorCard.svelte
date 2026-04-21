@@ -198,10 +198,11 @@
   onmouseenter={() => onHoverRhymeKey(anchor.rhymeKey)}
   onmouseleave={() => onHoverRhymeKey(null)}
 >
-  <!-- Collapse button on the right edge — visible only on card hover,
-       takes up a thin vertical strip so it doesn't steal header space. -->
+  <!-- Collapse tab: small vertically-centered chip on the right edge,
+       visible only on card hover. Small enough that it doesn't cover
+       the body scrollbar or the header's × button. -->
   <button
-    class="absolute right-0 top-0 bottom-0 z-10 hidden w-4 items-center justify-center text-[11px] text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 group-hover:flex dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+    class="absolute right-0 top-1/2 z-10 hidden h-6 w-3 -translate-y-1/2 items-center justify-center rounded-l border border-r-0 border-zinc-200 bg-white/90 text-[9px] text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 group-hover:flex dark:border-zinc-700 dark:bg-zinc-900/90 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
     title={t('收起这个锚点', 'Collapse')}
     onclick={toggleCollapsed}
     aria-label={t('收起这个锚点', 'Collapse')}
