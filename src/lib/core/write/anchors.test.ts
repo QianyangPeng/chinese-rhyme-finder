@@ -447,6 +447,36 @@ describe('detectEchoAnchors', () => {
     expect(echoes).toEqual([]);
   });
 
+  it('echoes 2-char proper nouns NOT in dict when they rhyme with a seed', () => {
+    // 姜维 and 降维 are names / modern compounds — not in our fake
+    // dict, but they end in "uei" and should echo a uei seed.
+    const text = '有个相对的事\n看不懂姜维的戏\n没想降维打击';
+    const seeds: Anchor[] = [
+      { id: 'm1', text: '相对', start: 2, end: 4, toneMode: 'exact', auto: false }
+    ];
+    // Dict notably does NOT contain 姜维 or 降维.
+    const slimDict = new Set(['相对', '打击', '的事']);
+    const echoes = detectEchoAnchors(text, slimDict, seeds);
+    const texts = echoes.map((e) => e.text);
+    expect(texts).toContain('姜维');
+    expect(texts).toContain('降维');
+  });
+
+  it('does NOT accept 3/4-char non-dict candidates (avoids random CJK runs)', () => {
+    // The line contains a 4-char run that isn't a dict word but
+    // happens to end in a seed's rhyme. We must not echo it.
+    const text = '不要乱说话随便维'; // "便维" hypothetical — trailing 维 rhymes uei
+    const seeds: Anchor[] = [
+      { id: 'm1', text: '相对', start: 0, end: 2, toneMode: 'exact', auto: false }
+    ];
+    const slimDict = new Set(['相对']);
+    const echoes = detectEchoAnchors(text, slimDict, seeds);
+    // The 4-char "乱说话随" isn't in dict and isn't allowed as a
+    // fallback (only 2-char gets fallback). Any echoes should be
+    // 2-char only, like "便维" if uei-rhyming.
+    for (const e of echoes) expect(e.text.length).toBe(2);
+  });
+
   it("assignRhymeGroups: echoes never show the panel, even if first-in-group", () => {
     // Build a group where an echo comes FIRST (by start offset) but
     // must still not take the panel slot.

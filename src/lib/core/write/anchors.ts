@@ -343,11 +343,27 @@ export function detectEchoAnchors(
         if (i + k > line.length) continue;
         const word = line.slice(i, i + k);
         if (!/^[\u4e00-\u9fff\u3400-\u4dbf]+$/.test(word)) continue;
-        if (!dict.has(word)) continue;
+
+        const inDict = dict.has(word);
+        const key = rhymeGroupKey(word);
+        const matchesSeed = activeKeys.has(key);
+
+        // 3- and 4-char candidates must be in the dictionary so we
+        // don't treat random long CJK runs as "words". 2-char
+        // candidates get a proper-noun fallback: if the pair rhymes
+        // with a seed, accept it even if it's not in the dict. This
+        // catches names like "姜维" / modern compounds like "降维"
+        // that aren't in cedict but the user can hear as rhymes.
+        if (k > 2 && !inDict) continue;
+        if (!matchesSeed) continue;
+        if (k === 2 && !inDict) {
+          // 2-char fallback already gated by matchesSeed; fine.
+        }
+
         const start = lineOffset + i;
         const end = start + k;
         if (hasOverlap(start, end)) continue;
-        if (!activeKeys.has(rhymeGroupKey(word))) continue;
+
         // Add echo and skip past it.
         echoes.push({
           id: uid(),
