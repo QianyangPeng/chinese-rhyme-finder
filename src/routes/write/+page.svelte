@@ -105,8 +105,120 @@
     { id: 'all', zh: '全部', en: 'All', sources: SOURCES.map((s) => s.id) }
   ];
 
+  const schemeExamples: Record<SchemeMode, string> = {
+    free: [
+      '在雨夜里寻找出口',
+      '把没说完的话放进胸口',
+      '你说明天还会继续',
+      '我把声音写成灯火继续'
+    ].join('\n'),
+    monorhyme: [
+      '我把孤单写进微光',
+      '让旧梦重新越过心墙',
+      '等鼓点落下推开天窗',
+      '把名字唱成滚烫的光'
+    ].join('\n'),
+    aabb: [
+      '我在雨里慢慢寻找出口',
+      '把没说完的话放进胸口',
+      '等鼓点亮起穿过街巷',
+      '让新的旋律照进天光'
+    ].join('\n'),
+    abab: [
+      '我在雨里慢慢寻找出口',
+      '等鼓点亮起穿过街巷',
+      '把没说完的话放进胸口',
+      '让新的旋律照进天光'
+    ].join('\n')
+  };
+
+  const knownExampleTexts = new Set(Object.values(schemeExamples));
+
   function enabledSourcesForVibe(): string[] {
     return vibeOptions.find((v) => v.id === candidateVibe)?.sources ?? SOURCES.map((s) => s.id);
+  }
+
+  function normalizeExampleText(text: string): string {
+    return text.replace(/\r\n/g, '\n').trim();
+  }
+
+  function paragraphsAreBlank(ps: readonly Paragraph[] = paragraphs): boolean {
+    return ps.every((p) => !p.text.trim() && p.manualAnchors.length === 0);
+  }
+
+  function paragraphsAreExample(ps: readonly Paragraph[] = paragraphs): boolean {
+    return (
+      ps.length === 1 &&
+      ps[0].manualAnchors.length === 0 &&
+      knownExampleTexts.has(normalizeExampleText(ps[0].text))
+    );
+  }
+
+  function focusExampleParagraph(paragraphId: string) {
+    focusedParagraphId = paragraphId;
+    cursorInfo = { paragraphId, lineIndex: 0, cursor: 0 };
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`paragraph-textarea-${paragraphId}`) as HTMLTextAreaElement | null;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(0, 0);
+    });
+  }
+
+  function applySchemeExample(mode: SchemeMode) {
+    const canReplaceCurrent = paragraphsAreBlank() || paragraphsAreExample();
+    if (!canReplaceCurrent) {
+      flushSave();
+      const reusable = drafts.drafts.find(
+        (draft) =>
+          draft.id !== drafts.current?.id &&
+          (paragraphsAreBlank(draft.paragraphs) || paragraphsAreExample(draft.paragraphs))
+      );
+      if (reusable) drafts.setCurrent(reusable.id);
+      else drafts.create();
+      loadFromDraft();
+    }
+
+    if (!drafts.current) {
+      drafts.create();
+      loadFromDraft();
+    }
+    const cur = drafts.current;
+    if (!cur) return;
+
+    let paragraphId = paragraphs[0]?.id ?? cur.paragraphs[0]?.id ?? '';
+    if (!paragraphId) {
+      paragraphId = drafts.addParagraph(cur.id);
+      loadFromDraft();
+    }
+    if (!paragraphId) return;
+
+    const exampleParagraph: Paragraph = {
+      id: paragraphId,
+      text: schemeExamples[mode],
+      manualAnchors: []
+    };
+    drafts.setParagraphs(cur.id, [exampleParagraph]);
+    paragraphs = [exampleParagraph];
+    autoAnchorMemo = {};
+    focusExampleParagraph(paragraphId);
+  }
+
+  function syncFocusedTextarea() {
+    if (!focusedParagraphId) return;
+    const el = document.getElementById(`paragraph-textarea-${focusedParagraphId}`) as HTMLTextAreaElement | null;
+    if (!el) return;
+    const idx = paragraphs.findIndex((p) => p.id === focusedParagraphId);
+    if (idx < 0 || paragraphs[idx].text === el.value) return;
+    const arr = [...paragraphs];
+    arr[idx] = { ...arr[idx], text: el.value };
+    paragraphs = arr;
+  }
+
+  function selectScheme(mode: SchemeMode) {
+    syncFocusedTextarea();
+    schemeMode = mode;
+    applySchemeExample(mode);
   }
 
   function loadFromDraft() {
@@ -124,6 +236,7 @@
   onMount(() => {
     if (!drafts.current) drafts.create();
     loadFromDraft();
+    applySchemeExample(schemeMode);
     searchClient.init(base);
   });
 
@@ -707,7 +820,7 @@
                 ? 'border-zinc-950 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950'
                 : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
               title={t(option.hintZh, option.hintEn)}
-              onclick={() => (schemeMode = option.id)}
+              onclick={() => selectScheme(option.id)}
             >
               {t(option.zh, option.en)}
             </button>
