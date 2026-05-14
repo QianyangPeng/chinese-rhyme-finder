@@ -188,16 +188,31 @@
     const allowedSet = new Set(SOURCE_TOGGLES.filter((s) => enabled[s.id]).map((s) => s.id));
     const phrases = full.phrases.filter((p) => allowedSet.has(p.source));
     const byLength = new Map<number, number[]>();
+    const byLastFinalKey = new Map<string, number[]>();
     for (let id = 0; id < phrases.length; id++) {
-      const L = phrases[id].length;
+      const phrase = phrases[id];
+      const L = phrase.length;
       let bucket = byLength.get(L);
       if (!bucket) {
         bucket = [];
         byLength.set(L, bucket);
       }
       bucket.push(id);
+
+      const lastFinal = phrase.finals[phrase.finals.length - 1];
+      if (lastFinal) {
+        const lastKey = strictScheme.keyOf(lastFinal);
+        if (lastKey) {
+          let keyBucket = byLastFinalKey.get(lastKey);
+          if (!keyBucket) {
+            keyBucket = [];
+            byLastFinalKey.set(lastKey, keyBucket);
+          }
+          keyBucket.push(id);
+        }
+      }
     }
-    const out: Lexicon = { phrases, byLength };
+    const out: Lexicon = { phrases, byLength, byLastFinalKey };
     _filteredLexiconCache.set(key, out);
     return out;
   }
@@ -280,7 +295,7 @@
     };
   }
 
-  let catalog = $state<{ clusters: any[]; lexiconRef: any[]; _deduped: Map<string, any> }>({
+  let catalog = $state<{ clusters: any[]; lexiconRef: readonly any[]; _deduped: Map<string, any> }>({
     clusters: [],
     lexiconRef: [],
     _deduped: new Map(),
@@ -695,7 +710,7 @@
                 {#if cluster.distinctTags.length > 0}
                   <span>·</span>
                   <span class="text-zinc-400">
-                    {cluster.distinctTags.filter((t) => !t.startsWith('freq:')).map((t) => `#${t}`).join(' ')}
+                    {cluster.distinctTags.filter((tag: string) => !tag.startsWith('freq:')).map((tag: string) => `#${tag}`).join(' ')}
                   </span>
                 {/if}
               </p>
@@ -719,7 +734,7 @@
                 onclick={() =>
                   copyText(
                     cluster.members
-                      .map((m) => catalog.lexiconRef[m.phraseId].text)
+                      .map((m: { phraseId: number }) => catalog.lexiconRef[m.phraseId].text)
                       .join(' / ')
                   )}
               >

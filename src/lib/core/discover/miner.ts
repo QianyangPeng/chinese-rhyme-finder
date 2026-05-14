@@ -10,6 +10,7 @@
 
 import type { RhymeScheme } from '../rhyme/types.js';
 import type { Lexicon } from '../corpus/types.js';
+import type { Tone } from '../pinyin/types.js';
 import { composeKey, type ToneMode } from '../rhyme/tone.js';
 import type { ClusterCatalog, ClusterMember, RhymeCluster } from './types.js';
 
@@ -73,7 +74,7 @@ function buildBuckets(
     const p = lexicon.phrases[phraseId];
     // Compose keys with tone info if the user requested tone-aware mining.
     const keys = p.finals.map((f, i) =>
-      composeKey(f, p.tones?.[i] ?? 0, scheme, opts.toneMode)
+      composeKey(f, (p.tones?.[i] ?? 0) as Tone, scheme, opts.toneMode)
     );
     if (keys.some((k) => !k)) continue;
 

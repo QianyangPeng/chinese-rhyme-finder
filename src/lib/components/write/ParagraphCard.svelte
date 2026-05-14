@@ -1,3 +1,22 @@
+<script module lang="ts">
+  export type LineState = 'empty' | 'seed' | 'hit' | 'miss' | 'free';
+
+  export interface LineMeta {
+    role: string | null;
+    state: LineState;
+    tail: string;
+    targetLine?: number;
+    colorBorder?: string;
+    colorBg?: string;
+  }
+
+  export interface CursorInfo {
+    paragraphId: string;
+    lineIndex: number;
+    cursor: number;
+  }
+</script>
+
 <script lang="ts">
   /**
    * One paragraph — the editor + line-num gutter + color bar.
@@ -88,6 +107,10 @@
     /** 1-based absolute line number for this paragraph's first line.
      *  Line numbers continue across paragraphs. */
     startLine?: number;
+    /** Per-line rhyme scheme/status metadata, rendered in the gutter. */
+    lineMeta?: readonly LineMeta[];
+    /** Active line inside this paragraph, used for IDE-style focus. */
+    activeLineIndex?: number | null;
     /** Globally-shared rhyme key currently being hovered (by any
      *  paragraph or panel card). Anchors with a matching rhymeKey
      *  get a boosted style in the overlay. */
@@ -97,6 +120,7 @@
     onFocus: () => void;
     onManualAnchorsChange: (anchors: Anchor[]) => void;
     onDelete: () => void;
+    onCursorChange?: (info: CursorInfo) => void;
     /** Called with the rhymeKey the mouse is currently over (or null
      *  when the mouse leaves all anchor ranges). */
     onHoverRhymeKey?: (key: string | null) => void;
@@ -108,11 +132,14 @@
     focused,
     index,
     startLine = 1,
+    lineMeta = [],
+    activeLineIndex = null,
     hoveredRhymeKey = null,
     onTextChange,
     onFocus,
     onManualAnchorsChange,
     onDelete,
+    onCursorChange = () => {},
     onHoverRhymeKey = () => {}
   }: Props = $props();
 
@@ -131,12 +158,20 @@
   );
 
   function onInput(e: Event) {
-    onTextChange((e.target as HTMLTextAreaElement).value);
+    const value = (e.target as HTMLTextAreaElement).value;
+    onTextChange(value);
+    trackSelection(value);
   }
-  function trackSelection() {
+  function trackSelection(currentText = text) {
     if (!textareaEl) return;
     selStart = textareaEl.selectionStart ?? 0;
     selEnd = textareaEl.selectionEnd ?? selStart;
+    const lineIndex = currentText.slice(0, selStart).split('\n').length - 1;
+    onCursorChange({ paragraphId, lineIndex, cursor: selStart });
+  }
+  function handleFocus() {
+    onFocus();
+    trackSelection();
   }
 
   function addAnchorFromSelection() {
@@ -189,6 +224,21 @@
     return out;
   });
 
+  function lineStateGlyph(state: LineState | undefined): string {
+    if (state === 'hit') return '✓';
+    if (state === 'miss') return '!';
+    if (state === 'seed') return '◆';
+    if (state === 'free') return '·';
+    return '';
+  }
+
+  function lineStateClass(state: LineState | undefined): string {
+    if (state === 'hit') return 'text-emerald-700 dark:text-emerald-300';
+    if (state === 'miss') return 'text-rose-700 dark:text-rose-300';
+    if (state === 'seed') return 'text-sky-700 dark:text-sky-300';
+    return 'text-zinc-400';
+  }
+
   // Keep overlay's horizontal scroll in sync with textarea's.
   let overlayEl = $state<HTMLDivElement | null>(null);
   function syncScroll() {
@@ -218,6 +268,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <article
   class="border-b border-zinc-100 dark:border-zinc-800 transition-colors {focused
@@ -233,7 +284,7 @@
       <!-- Line-num gutter: right next to color bar -->
       <div
         class="flex-shrink-0 border-r border-zinc-100 dark:border-zinc-800"
-        style="width: 32px; background: {bar.bg};"
+        style="width: 72px; background: {bar.bg};"
         aria-hidden="true"
       >
         <!-- Header-height spacer -->
@@ -243,9 +294,30 @@
              Each row matches the textarea's 28px line-height. -->
         <div class="font-mono text-[10px] text-zinc-400" style="padding-top: 8px;">
           {#each Array(lineCount) as _, i (i)}
+            {@const meta = lineMeta[i]}
+            {@const isActiveLine = activeLineIndex === i}
             <div
-              style="height: 28px; line-height: 28px; text-align: right; padding-right: 6px;"
-            >{startLine + i}</div>
+              class="flex items-center justify-end gap-1 px-1 {isActiveLine ? 'bg-white/70 dark:bg-zinc-950/40' : ''}"
+              style="height: 28px; line-height: 28px;"
+              title={meta?.tail ? `L${startLine + i} · ${meta.tail}` : `L${startLine + i}`}
+            >
+              <span class="w-5 text-right">{startLine + i}</span>
+              {#if meta?.role}
+                <span
+                  class="inline-flex h-4 min-w-5 items-center justify-center rounded px-1 text-[9px] font-bold"
+                  style="border: 1px solid {meta.colorBorder ?? 'rgba(113,113,122,0.4)'}; background: {meta.colorBg ?? 'rgba(113,113,122,0.08)'}; color: {meta.colorBorder ?? 'currentColor'};"
+                >
+                  {meta.role}
+                </span>
+              {:else}
+                <span class="inline-flex h-4 min-w-5 items-center justify-center rounded px-1 text-[9px] {lineStateClass(meta?.state)}">
+                  {lineStateGlyph(meta?.state)}
+                </span>
+              {/if}
+              <span class="w-3 text-center text-[9px] {lineStateClass(meta?.state)}">
+                {lineStateGlyph(meta?.state)}
+              </span>
+            </div>
           {/each}
         </div>
       </div>
@@ -307,10 +379,10 @@
             bind:this={textareaEl}
             value={text}
             oninput={onInput}
-            onkeyup={trackSelection}
-            onclick={trackSelection}
-            onselect={trackSelection}
-            onfocus={onFocus}
+            onkeyup={() => trackSelection()}
+            onclick={() => trackSelection()}
+            onselect={() => trackSelection()}
+            onfocus={handleFocus}
             onscroll={syncScroll}
             onmousemove={onTextareaMouseMove}
             onmouseleave={onTextareaMouseLeave}

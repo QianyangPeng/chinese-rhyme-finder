@@ -41,10 +41,10 @@ describe('matchFull · strict mode', () => {
 });
 
 describe('matchFull · 十三辙 vs strict comparison', () => {
-  it('considers ang & iang & uang the same in 十三辙 but distinct in strict', () => {
+  it('considers ang & iang the same rhyme body in strict and 十三辙', () => {
     const a = ['ang'];
     const b = ['iang'];
-    expect(matchFull(a, b, strictScheme)!.isFullMatch).toBe(false);
+    expect(matchFull(a, b, strictScheme)!.isFullMatch).toBe(true);
     expect(matchFull(a, b, shisanzheScheme)!.isFullMatch).toBe(true);
   });
 
@@ -121,7 +121,7 @@ describe('matchHead', () => {
 describe('keysFor', () => {
   it('maps a final list to scheme keys for indexing', () => {
     expect(keysFor(['iang', 'uei', 'a', 'i'], strictScheme))
-      .toEqual(['iang', 'uei', 'a', 'i']);
+      .toEqual(['ang', 'ei', 'a', 'i']);
     expect(keysFor(['iang', 'uei', 'a', 'i'], shisanzheScheme))
       .toEqual(['江阳辙', '灰堆辙', '发花辙', '一七辙']);
   });

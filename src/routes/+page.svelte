@@ -383,7 +383,7 @@
                   {phrase.pinyinWithTone?.join(' ') ?? ''}
                 </td>
                 <td class="py-1.5 pr-3 font-mono text-xs text-zinc-500">
-                  {phrase.segments?.map((s) => `${s.text}/${s.pos}`).join(' ') ?? ''}
+                  {phrase.segments?.map((s: { text: string; pos: string }) => `${s.text}/${s.pos}`).join(' ') ?? ''}
                 </td>
                 <td class="py-1.5 text-right font-mono text-xs text-zinc-400">
                   {phrase.quality.toFixed(2)}

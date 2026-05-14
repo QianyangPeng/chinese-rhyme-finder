@@ -18,12 +18,13 @@ import type {
   IncomingMessage,
   WorkerMessage
 } from './search.worker';
+import type { ToneMode } from '$lib/core/rhyme';
 
 interface SearchOpts {
   target: string[];
   targetTones?: number[];
   excludeText?: string;
-  toneMode: 'none' | 'exact';
+  toneMode: ToneMode;
   requireTailMatch: boolean;
   windowMode: 'tail' | 'anywhere';
   enabledSources?: string[];

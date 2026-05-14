@@ -20,7 +20,7 @@ describe('binByRelaxation', () => {
       ['iang', 'uei', 'a', 'i'], // index 0 — perfect
       ['iang', 'uei', 'a', 'i'], // index 1 — perfect (duplicate)
       ['iang', 'uei', 'e', 'i'], // index 2 — one off
-      ['ong',  'ei',  'u', 'a']  // index 3 — all off
+      ['en',   'ou',  'u', 'e']  // index 3 - all off
     ];
     const r = binByRelaxation(target, candidates, strictScheme);
     expect(r.bins[0].candidateIndices).toEqual([0, 1]);
@@ -39,9 +39,9 @@ describe('binByRelaxation', () => {
   });
 
   it('uses the scheme to decide what counts as matching', () => {
-    const target = ['ang', 'eng'];
+    const target = ['eng', 'en'];
     const candidates = [
-      ['iang', 'ing'] // strict: 0 match, shisanzhe: 2 match
+      ['ing', 'in'] // strict: 0 matches, shisanzhe: 2 matches
     ];
     const strict = binByRelaxation(target, candidates, strictScheme);
     const zhe = binByRelaxation(target, candidates, shisanzheScheme);

@@ -21,6 +21,7 @@
 import { searchByFinals } from '$lib/core/corpus/search';
 import { strictScheme } from '$lib/core/rhyme/schemes/strict';
 import type { Lexicon, PhraseRecord } from '$lib/core/corpus/types';
+import type { ToneMode } from '$lib/core/rhyme';
 import { sourceMeta } from '$lib/util/sources';
 
 // ── Outgoing message shapes ──────────────────────────────────────
@@ -87,7 +88,7 @@ export type IncomingMessage =
       target: string[];
       targetTones?: number[];
       excludeText?: string;
-      toneMode: 'none' | 'exact';
+      toneMode: ToneMode;
       requireTailMatch: boolean;
       windowMode: 'tail' | 'anywhere';
       /** Optional: only include hits whose source is in this list.

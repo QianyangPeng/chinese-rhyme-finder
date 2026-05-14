@@ -6,9 +6,9 @@ import { xinyunScheme, XINYUN } from './xinyun.js';
 import { VALID_FINALS } from '../../pinyin/decomposer.js';
 
 describe('strictScheme', () => {
-  it('uses the final itself as the key', () => {
-    expect(strictScheme.keyOf('iang')).toBe('iang');
-    expect(strictScheme.keyOf('uei')).toBe('uei');
+  it('uses the rhyme body as the key', () => {
+    expect(strictScheme.keyOf('iang')).toBe('ang');
+    expect(strictScheme.keyOf('uei')).toBe('ei');
   });
 
   it('separates finals that 十三辙 would merge', () => {
